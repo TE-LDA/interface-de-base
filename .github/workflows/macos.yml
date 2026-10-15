@@ -1,0 +1,25 @@
+name: macOS Hello World
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build & run Hello World
+        run: |
+          swift hello.swift
+          OUTPUT=$(swift hello.swift)
+          if [ "$OUTPUT" != "Hello, World!" ]; then
+            echo "::error::Unexpected output: $OUTPUT"
+            exit 1
+          fi

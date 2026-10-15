@@ -1,4 +1,4 @@
-name: macOS Hello World
+name: macOS Calculator
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  hello:
+  build:
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -15,11 +15,24 @@ jobs:
       - name: Swift version
         run: swift --version
 
-      - name: Build & run Hello World
+      - name: Build
+        run: swift build
+
+      - name: Run tests
+        run: swift test
+
+      - name: Verify app launches
         run: |
-          swift hello.swift
-          OUTPUT=$(swift hello.swift)
-          if [ "$OUTPUT" != "Hello, World!" ]; then
-            echo "::error::Unexpected output: $OUTPUT"
+          swift build -c release
+          APP=$(swift build -c release --show-bin-path)/Calculator
+          codesign --force --deep --sign - "$APP"
+          "$APP" &
+          APP_PID=$!
+          sleep 5
+          if kill -0 $APP_PID 2>/dev/null; then
+            echo "L'application Calculator s'est lancée avec succès."
+            kill $APP_PID
+          else
+            echo "::error::L'application n'a pas survécu 5 secondes."
             exit 1
           fi

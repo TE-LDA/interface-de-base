@@ -1,13 +1,25 @@
 # interface-de-base
 
-Petit projet Hello World en Swift, testé sur macOS via GitHub Actions.
+Calculatrice macOS en SwiftUI, compilée et testée sur macOS via GitHub Actions.
 
-## Utilisation
+## Structure
+
+- `Sources/Calculator/` — application SwiftUI (fenêtre + boutons) et moteur de calcul (`CalculatorEngine`)
+- `Tests/CalculatorTests/` — tests unitaires XCTest du moteur
+
+## Utilisation en local (macOS)
 
 ```bash
-swift hello.swift
+swift build
+swift run Calculator
+```
+
+## Tests
+
+```bash
+swift test
 ```
 
 ## CI
 
-Le workflow `.github/workflows/macos.yml` compile et exécute le programme sur un runner macOS (`macos-latest`) à chaque push, pull request ou déclenchement manuel.
+Le workflow `.github/workflows/macos.yml` compile le projet, exécute les tests et vérifie que l'application se lance sur un runner macOS (`macos-latest`) à chaque push, pull request ou déclenchement manuel.

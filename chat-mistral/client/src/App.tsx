@@ -94,6 +94,7 @@ export default function App() {
   const [chronicle, setChronicle] = useState<ChronicleEntry[]>([]);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const [showLettre, setShowLettre] = useState(false);
   const [order, setOrder] = useState("");
   const [sending, setSending] = useState(false);
   const chronicleRef = useRef<HTMLDivElement>(null);
@@ -132,6 +133,7 @@ export default function App() {
                   : s
               );
               pushChronicle(demande.year, `✉️ Lettre du conseil des anciens — « ${l.titre} »`);
+              setShowLettre(true);
             })
             .catch(() => {
               pushChronicle(demande.year, `✉️ Le conseil envoie sa demande : ${demande.texte}`);
@@ -225,16 +227,13 @@ export default function App() {
     });
   }
 
-  async function submitOrder(event: React.FormEvent) {
-    event.preventDefault();
-    const text = order.trim();
-    if (!text || sending) return;
-    setOrder("");
-
+  async function sendOrderText(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
     const hadDemande = state.demandeConseil;
     setSending(true);
     try {
-      const res = await sendOrder(text, stateSummary(state));
+      const res = await sendOrder(trimmed, stateSummary(state));
       if (res.reponse) pushChronicle(state.year, `🖋️ ${res.reponse}`);
       applyAction(res.action);
       if (hadDemande) {
@@ -248,6 +247,24 @@ export default function App() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function submitOrder(event: React.FormEvent) {
+    event.preventDefault();
+    const text = order.trim();
+    setOrder("");
+    await sendOrderText(text);
+  }
+
+  function answerLettre(accept: boolean) {
+    setShowLettre(false);
+    const d = state.demandeConseil;
+    if (!d) return;
+    void sendOrderText(
+      accept
+        ? `J'accorde la proposition du conseil : ${d.texte}`
+        : `Je refuse la proposition du conseil : ${d.texte}`
+    );
   }
 
   function applyEffets(s: GameState, e: Record<string, number> | undefined) {
@@ -422,12 +439,9 @@ export default function App() {
             <h2>🖋️ Vos ordres</h2>
             {state.demandeConseil &&
               (state.demandeConseil.corps ? (
-                <div className="lettre">
-                  <div className="lettre-head">✉️ Lettre du conseil des anciens <span className="seal">🔴</span></div>
-                  <h3>{state.demandeConseil.titre ?? "Proposition du conseil"}</h3>
-                  <p className="lettre-corps">{state.demandeConseil.corps}</p>
-                  <p className="lettre-hint">Arbitrez ci-dessous : « accorde », « refuse », ou « plutôt… »</p>
-                </div>
+                <button type="button" className="lettre-banner" onClick={() => setShowLettre(true)}>
+                  ✉️ Nouvelle lettre du conseil : « {state.demandeConseil.titre ?? state.demandeConseil.texte} » — cliquez pour lire en grand et arbitrer (OUI / NON)
+                </button>
               ) : (
                 <div className="demande-banner">
                   🙇 Le conseil délibère et rédige sa lettre… (« {state.demandeConseil.texte} »)
@@ -491,6 +505,33 @@ export default function App() {
           </div>
         </aside>
       </div>
+
+      {showLettre && state.demandeConseil?.corps && (
+        <div className="overlay" onClick={() => setShowLettre(false)}>
+          <div className="letter-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="letter-paper">
+              <div className="letter-paper-head">
+                ✉️ Conseil des anciens du royaume de {state.kingdom}
+                <span className="seal">🔴</span>
+              </div>
+              <h2>{state.demandeConseil.titre ?? "Lettre du conseil"}</h2>
+              <p className="letter-subject">Proposition soumise : {state.demandeConseil.texte}</p>
+              <p className="letter-body">{state.demandeConseil.corps}</p>
+            </div>
+            <div className="letter-actions">
+              <button type="button" className="oui" onClick={() => answerLettre(true)}>
+                ✅ OUI — j'accorde
+              </button>
+              <button type="button" className="non" onClick={() => answerLettre(false)}>
+                ❌ NON — je refuse
+              </button>
+            </div>
+            <p className="letter-alt">
+              …ou écrivez votre arbitrage en texte libre dans le panneau « Vos ordres » (ex. : « plutôt une foire »).
+            </p>
+          </div>
+        </div>
+      )}
 
       {showMap && (
         <div className="overlay" onClick={() => setShowMap(false)}>

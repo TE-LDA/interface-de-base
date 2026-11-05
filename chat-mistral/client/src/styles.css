@@ -223,44 +223,112 @@ button:disabled {
   margin-bottom: 0.55rem;
 }
 
-.lettre {
-  background: linear-gradient(180deg, #fffdf4, #f7eeda);
-  border: 1px solid var(--bordure);
-  border-left: 4px solid var(--or);
-  border-radius: 6px;
-  padding: 0.6rem 0.8rem;
-  margin-bottom: 0.6rem;
-  box-shadow: 0 2px 8px rgba(60, 40, 10, 0.2);
+.lettre-banner {
+  width: 100%;
+  text-align: left;
+  font-variant: normal;
+  font-size: 0.88rem;
+  font-style: italic;
+  color: #7c3524;
+  background: #fbe4d4;
+  border: 1px solid #8a3a2a;
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.55rem;
+  box-shadow: 0 2px 6px rgba(80, 30, 10, 0.25);
 }
 
-.lettre-head {
-  font-variant: small-caps;
-  letter-spacing: 0.05em;
-  font-size: 0.85rem;
-  color: #6b4f26;
+.lettre-banner:hover:not(:disabled) {
+  background: #f8d5bd;
+}
+
+.letter-modal {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.letter-paper {
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 90, 40, 0.05) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg, #fffdf4, #f4e8cb);
+  border: 1px solid var(--bordure);
+  outline: 5px double rgba(184, 134, 11, 0.5);
+  outline-offset: -10px;
+  border-radius: 6px;
+  padding: 1.8rem 2.2rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.letter-paper-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  color: #6b4f26;
+  border-bottom: 1px solid var(--bordure);
+  padding-bottom: 0.6rem;
+  font-size: 0.95rem;
 }
 
-.lettre h3 {
-  margin: 0.3rem 0 0.4rem;
-  font-size: 1rem;
+.letter-paper-head .seal {
+  font-size: 1.3rem;
+}
+
+.letter-paper h2 {
+  margin: 0.9rem 0 0.3rem;
+  font-size: 1.5rem;
   font-style: italic;
+  color: var(--encre);
 }
 
-.lettre-corps {
-  margin: 0 0 0.5rem;
-  font-size: 0.92rem;
-  line-height: 1.55;
-  white-space: pre-wrap;
+.letter-subject {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  color: #7a5a2e;
 }
 
-.lettre-hint {
+.letter-body {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 1.18rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  color: var(--encre);
+}
+
+.letter-actions {
+  display: flex;
+  gap: 0.8rem;
+}
+
+.letter-actions button {
+  flex: 1;
+  font-size: 1.15rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+}
+
+.letter-actions .oui {
+  background: linear-gradient(180deg, #7d9b4a, #5c7433);
+  border-color: #2c3d17;
+}
+
+.letter-actions .non {
+  background: linear-gradient(180deg, #a04a35, #7c3524);
+  border-color: #3d150c;
+}
+
+.letter-alt {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
   font-style: italic;
-  color: #7c3524;
+  color: #e8d9b5;
 }
 
 .orders input {

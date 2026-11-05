@@ -131,6 +131,29 @@ export function invest(s: GameState, cat: string, montant: number): GameEvent | 
   };
 }
 
+export const ADVISOR_THRESHOLD = 50;
+
+export function advisorStrategy(
+  cat: string
+): { text: string; kind: EventKind; effets: Record<string, number>; building?: BuildingType } | null {
+  switch (cat) {
+    case "commerce":
+      return { text: "Les conseillers lancent une grande foire et attirent des commerçants : un marché est érigé gratuitement, mais les petits artisans locaux dénoncent la concurrence (-3 moral).", kind: "joy", effets: { moral: -3 }, building: "marché" };
+    case "foi":
+      return { text: "Les conseillers érigent une chapelle et appellent un pèlerinage (+15 foi), mais les libertins du bourg râlent contre tant de bigoterie (-2 moral).", kind: "joy", effets: { foi: 15, moral: -2 }, building: "église" };
+    case "defense":
+      return { text: "Les conseillers lèvent une milice et érigent une tour de guet, mais prélèvent une taxe de guerre (-10 or, -2 moral).", kind: "joy", effets: { or: -10, moral: -2 }, building: "tour" };
+    case "agriculture":
+      return { text: "Les conseillers défrichent et sèment de nouveaux champs : une ferme est créée et +10 bois sont coupés, mais la forêt sacrée est profanée (-3 foi).", kind: "joy", effets: { bois: 10, foi: -3 }, building: "ferme" };
+    case "science":
+      return { text: "Les conseillers attirent des maîtres étrangers et fondent un scriptorium (+10 📖), mais réclament leur dû (-10 or).", kind: "joy", effets: { science: 10, or: -10 }, building: "scriptorium" };
+    case "sante":
+      return { text: "Grâce à vos subsides, un médecin s'installe au château : la peste sera désormais atténuée, mais ses honoraires coûtent 8 or.", kind: "joy", effets: { or: -8 } };
+    default:
+      return null;
+  }
+}
+
 export const COUNCIL_PROPOSALS = [
   "taxer davantage les marchés pour remplir les caisses du royaume",
   "organiser de grandes prières publiques pour apaiser le ciel",

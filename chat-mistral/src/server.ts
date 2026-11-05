@@ -93,6 +93,7 @@ app.post("/api/order", async (req, res) => {
     "Si le seigneur demande seulement un devis, réponds type \"rien\" et décris le devis dans reponse.",
     "Si le seigneur s'adresse à ses hommes (ex. « améliore l'économie, que me proposez-vous ? »), fais répondre les hommes dans reponse et applique de petits effets cohérents, ou lance une construction abordable (type \"build\").",
     "Le coût s'adapte à la quantité demandée (plusieurs exemplaires = tarif dégressif) : indique le coût TOTAL dans devis pour la quantite demandée.",
+    "Un investissement d'au moins 50 pièces d'or déclenche une stratégie des conseillers (bâtiment offert + effets positifs ET négatifs) : décris cette stratégie dans reponse (marché, chapelle, tour, ferme, scriptorium, médecin selon la catégorie).",
     "Si demande_en_attente n'est pas null, le seigneur ARBITRE la lettre du conseil (son argumentation est dans demande_en_attente) : « accorde/oui » → petits effets positifs cohérents avec la lettre, « refuse/non » → petits effets négatifs ou rien, toute autre réponse → discute et applique de petits effets selon le sens.",
     "Dans reponse, fais réagir le conseil à la décision du seigneur (remerciements, déception, contre-proposition…).",
     "La strategie du royaume (macro) oriente tes propositions : ne propose pas de mesures militaires si la stratégie est Foi ou Savoir, etc.",

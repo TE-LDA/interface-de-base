@@ -7,7 +7,9 @@ import {
   GRID_W,
   STRATEGIES,
   TECHS,
+  ADVISOR_THRESHOLD,
   PROJECT_CATS,
+  advisorStrategy,
   buildingAt,
   createGame,
   defense,
@@ -380,15 +382,42 @@ export default function App() {
         const next: GameState = {
           ...s,
           resources: { ...s.resources },
+          buildings: s.buildings.map((b) => ({ ...b })),
           projects: [...s.projects],
           events: [...s.events],
+          investiParCat: { ...s.investiParCat },
         };
-        const ev = invest(next, cat, Math.floor(action.montant ?? 0));
-        if (ev) {
-          next.events.push(ev);
-          if (!narrated.current.has(ev.id)) {
-            narrated.current.add(ev.id);
-            pushChronicle(ev.year, ev.text);
+        const demande = Math.floor(action.montant ?? 0);
+        const ev = invest(next, cat, demande);
+        if (!ev) return s;
+        const investi = Math.max(1, Math.min(demande, Math.floor(s.resources.or)));
+        next.events.push(ev);
+        if (!narrated.current.has(ev.id)) {
+          narrated.current.add(ev.id);
+          pushChronicle(ev.year, ev.text);
+        }
+        if (investi >= ADVISOR_THRESHOLD) {
+          const strat = advisorStrategy(cat);
+          if (strat) {
+            applyEffets(next, strat.effets);
+            if (strat.building) {
+              const tiles = freeTiles(next);
+              if (tiles.length > 0) {
+                const t = tiles[Math.floor(Math.random() * tiles.length)];
+                next.buildings.push({ type: strat.building, x: t.x, y: t.y, progress: 1, done: true });
+              }
+            }
+            const ev2 = {
+              id: next.nextEventId++,
+              year: next.year,
+              kind: strat.kind,
+              text: strat.text,
+            };
+            next.events.push(ev2);
+            if (!narrated.current.has(ev2.id)) {
+              narrated.current.add(ev2.id);
+              void narrate(next, ev2).then((text) => pushChronicle(ev2.year, text));
+            }
           }
         }
         return next;

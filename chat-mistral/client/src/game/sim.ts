@@ -81,6 +81,54 @@ export const STRATEGIES: { id: StrategyId; emoji: string; name: string; desc: st
   { id: "expansion", emoji: "🌾", name: "Expansion", desc: "La population croît plus vite" },
 ];
 
+export const PROJECT_CATS: Record<
+  string,
+  { emoji: string; name: string; desc: string; keywords: string[] }
+> = {
+  commerce: { emoji: "💰", name: "Commerce", desc: "+or/mois (5 % de l'investissement)", keywords: ["commerce", "marché", "or", "monnaie", "trésor", "auberge", "banque"] },
+  foi: { emoji: "⛪", name: "Culte", desc: "+foi/mois", keywords: ["église", "foi", "culte", "chapelle", "prière", "pèlerinage", "reliques"] },
+  science: { emoji: "📖", name: "Savoir", desc: "+science/mois", keywords: ["science", "savoir", "université", "bibliothèque", "scriptorium", "étude", "alchimie"] },
+  defense: { emoji: "🛡️", name: "Défense", desc: "+2 défense tant que le projet dure", keywords: ["défense", "defense", "rempart", "tour", "milice", "armée", "garde", "armes"] },
+  agriculture: { emoji: "🌾", name: "Agriculture", desc: "+nourriture/mois", keywords: ["agriculture", "ferme", "champ", "nourriture", "moisson", "bétail", "terre"] },
+  sante: { emoji: "⚕️", name: "Santé", desc: "la peste est deux fois moins meurtrière tant que le projet dure", keywords: ["santé", "medecine", "médecine", "peste", "hôpital", "médecin", "soin"] },
+};
+
+export const PROJECT_DURATION_MOIS = 24;
+
+export function projectGain(montant: number): number {
+  return Math.max(1, Math.round(montant * 0.05));
+}
+
+export function matchProjectCat(text: string): string {
+  const t = text.toLowerCase();
+  for (const [cat, c] of Object.entries(PROJECT_CATS)) {
+    if (c.keywords.some((k) => t.includes(k))) return cat;
+  }
+  return "commerce";
+}
+
+export function invest(s: GameState, cat: string, montant: number): GameEvent | null {
+  const m = Math.max(1, Math.min(Math.floor(montant), Math.floor(s.resources.or)));
+  if (m < 1 || s.resources.or < 1) return null;
+  const c = PROJECT_CATS[cat] ?? PROJECT_CATS.commerce;
+  s.resources.or -= m;
+  s.projects.push({
+    id: s.nextEventId++,
+    year: s.year,
+    cat,
+    nom: c.name,
+    emoji: c.emoji,
+    montant: m,
+    moisRestants: PROJECT_DURATION_MOIS,
+  });
+  return {
+    id: s.nextEventId++,
+    year: s.year,
+    kind: "joy",
+    text: `💰 Investissement de ${m} deniers dans « ${c.name} » — rendement ~${projectGain(m)}/mois pendant ${PROJECT_DURATION_MOIS} mois.`,
+  };
+}
+
 export const COUNCIL_PROPOSALS = [
   "taxer davantage les marchés pour remplir les caisses du royaume",
   "organiser de grandes prières publiques pour apaiser le ciel",
@@ -112,7 +160,8 @@ export function defense(s: GameState): number {
     (countDone(s, "château") > 0 ? 2 : 0) +
     countDone(s, "tour") +
     (s.techs?.includes("remparts") ? 4 : 0) +
-    (s.strategy === "défense" ? 2 : 0)
+    (s.strategy === "défense" ? 2 : 0) +
+    s.projects.filter((p) => p.cat === "defense").length * 2
   );
 }
 
@@ -133,6 +182,7 @@ export function createGame(): GameState {
     decrets: [],
     demandeConseil: null,
     strategy: "equilibre",
+    projects: [],
     events: [
       {
         id: 0,
@@ -252,7 +302,8 @@ function randomEvent(s: GameState): GameEvent | null {
     return mk("joy", text);
   }
   if (roll < 0.02) {
-    const mult = s.techs.includes("medecine") ? 0.5 : 1;
+    let mult = s.techs.includes("medecine") ? 0.5 : 1;
+    if (s.projects.some((p) => p.cat === "sante")) mult *= 0.5;
     const loss = Math.max(1, Math.round(Math.min(s.population, 5 + Math.floor(Math.random() * 10)) * mult));
     s.population -= loss;
     s.moral = Math.max(0, s.moral - 10);
@@ -376,6 +427,25 @@ export function step(s: GameState): GameEvent[] {
       (s.techs.includes("imprimerie") ? 2 : 0)) *
     (strat === "savoir" ? 1.5 : 1);
   s.resources.science = Math.min(999, s.resources.science + Math.round(scienceGain));
+
+  for (let i = s.projects.length - 1; i >= 0; i--) {
+    const p = s.projects[i];
+    const gain = projectGain(p.montant);
+    if (p.cat === "commerce") s.resources.or = Math.min(999, s.resources.or + gain);
+    else if (p.cat === "foi") s.resources.foi = Math.min(100, s.resources.foi + gain);
+    else if (p.cat === "science") s.resources.science = Math.min(999, s.resources.science + gain);
+    else if (p.cat === "agriculture") s.resources.nourriture = Math.min(500, s.resources.nourriture + gain);
+    p.moisRestants -= 1;
+    if (p.moisRestants <= 0) {
+      s.projects.splice(i, 1);
+      events.push({
+        id: s.nextEventId++,
+        year: y,
+        kind: "info",
+        text: `🏗️ Projet « ${p.nom} » terminé (${p.montant} 💰 investis, an ${p.year}).`,
+      });
+    }
+  }
 
   const auto = autoDevelop(s);
   if (auto) events.push(auto);

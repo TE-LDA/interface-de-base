@@ -66,13 +66,25 @@ export interface Decret {
 }
 
 export interface OrderAction {
-  type: "build" | "ressources" | "decret" | "rien";
+  type: "build" | "ressources" | "decret" | "invest" | "rien";
   batiment?: string;
   quantite?: number;
   devis?: OrderDevis;
   titre?: string;
   texte?: string;
+  projet?: string;
+  montant?: number;
   effets?: Record<string, number>;
+}
+
+export interface Project {
+  id: number;
+  year: number;
+  cat: string;
+  nom: string;
+  emoji: string;
+  montant: number;
+  moisRestants: number;
 }
 
 export interface DemandeConseil {
@@ -102,6 +114,7 @@ export interface GameState {
   decrets: Decret[];
   demandeConseil: DemandeConseil | null;
   strategy: StrategyId;
+  projects: Project[];
   techs: TechId[];
   nextEventId: number;
   running: boolean;

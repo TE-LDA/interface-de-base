@@ -7,11 +7,15 @@ import {
   GRID_W,
   STRATEGIES,
   TECHS,
+  PROJECT_CATS,
   buildingAt,
   createGame,
   defense,
   freeTiles,
   housingCap,
+  invest,
+  matchProjectCat,
+  projectGain,
   quote,
   research,
   seasonOf,
@@ -67,6 +71,9 @@ function stateSummary(s: GameState) {
       ? `${s.demandeConseil.texte}${s.demandeConseil.titre ? ` — lettre « ${s.demandeConseil.titre} » : ${s.demandeConseil.corps}` : ""}`
       : null,
     strategie: STRATEGIES.find((x) => x.id === s.strategy)?.name ?? "Équilibre",
+    budget_or: Math.floor(s.resources.or),
+    projets_actifs: s.projects.map((p) => `${p.emoji} ${p.nom}: ${p.montant} or, encore ${p.moisRestants} mois`),
+    categories_projets: Object.values(PROJECT_CATS).map((c) => `${c.name} (${c.desc})`),
     village_autonome: s.autoDev,
     batiments_disponibles: (
       Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
@@ -86,6 +93,7 @@ export default function App() {
       saved.decrets = saved.decrets ?? [];
       if (!saved.demandeConseil) saved.demandeConseil = null;
       if (!saved.strategy) saved.strategy = "equilibre";
+      saved.projects = saved.projects ?? [];
       saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
@@ -360,6 +368,25 @@ export default function App() {
         }
         return next;
       });
+    } else if (action.type === "invest") {
+      const cat = matchProjectCat(action.projet ?? "commerce");
+      setState((s) => {
+        const next: GameState = {
+          ...s,
+          resources: { ...s.resources },
+          projects: [...s.projects],
+          events: [...s.events],
+        };
+        const ev = invest(next, cat, Math.floor(action.montant ?? 0));
+        if (ev) {
+          next.events.push(ev);
+          if (!narrated.current.has(ev.id)) {
+            narrated.current.add(ev.id);
+            pushChronicle(ev.year, ev.text);
+          }
+        }
+        return next;
+      });
     } else if (action.type === "decret") {
       setState((s) => {
         const next: GameState = {
@@ -500,7 +527,7 @@ export default function App() {
               ✨ Nouvelle chronique (recommencer)
             </button>
             <p className="lois-count">
-              📜 {state.decrets.length} loi(s) et ordres en vigueur — voir dans 🗺️ Domaine
+              📜 {state.decrets.length} loi(s) en vigueur · 📊 {state.projects.length} projet(s) en cours — voir dans 🗺️ Domaine
             </p>
           </div>
         </aside>
@@ -618,6 +645,18 @@ export default function App() {
                     </strong>
                     {d.texte ? ` : ${d.texte}` : ""}
                   </p>
+                ))}
+              </div>
+            )}
+            {state.projects.length > 0 && (
+              <div className="projects">
+                <h3>📊 Projets en cours ({state.projects.length}) — budget 💰 {Math.round(r.or)}</h3>
+                {state.projects.map((p) => (
+                  <div className="tech" key={p.id}>
+                    <span>
+                      {p.emoji} {p.nom} <small>{p.montant} 💰 investis (an {p.year}) — ~{projectGain(p.montant)}/mois — encore {p.moisRestants} mois</small>
+                    </span>
+                  </div>
                 ))}
               </div>
             )}

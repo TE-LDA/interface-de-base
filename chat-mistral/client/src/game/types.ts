@@ -18,6 +18,14 @@ export type BuildingType =
 
 export type TechId = "assollement" | "horlogerie" | "medecine" | "remparts" | "imprimerie";
 
+export type StrategyId =
+  | "equilibre"
+  | "prospérité"
+  | "foi"
+  | "défense"
+  | "savoir"
+  | "expansion";
+
 export interface Building {
   type: BuildingType;
   x: number;
@@ -71,7 +79,6 @@ export interface DemandeConseil {
   id: number;
   year: number;
   texte: string;
-  ref: number;
 }
 
 export interface OrderResponse {
@@ -92,6 +99,7 @@ export interface GameState {
   events: GameEvent[];
   decrets: Decret[];
   demandeConseil: DemandeConseil | null;
+  strategy: StrategyId;
   techs: TechId[];
   nextEventId: number;
   running: boolean;

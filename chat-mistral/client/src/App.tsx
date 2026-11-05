@@ -3,9 +3,9 @@ import { sendOrder } from "./api";
 import { narrate } from "./game/chronicle";
 import {
   BUILDING_CATALOG,
-  DEMANDES_CONSEIL,
   GRID_H,
   GRID_W,
+  STRATEGIES,
   TECHS,
   buildingAt,
   createGame,
@@ -18,14 +18,18 @@ import {
   step,
   unitCost,
 } from "./game/sim";
-import type { BuildingType, ChronicleEntry, GameState, OrderAction, TechId } from "./game/types";
+import type {
+  BuildingType,
+  ChronicleEntry,
+  GameState,
+  OrderAction,
+  StrategyId,
+  TechId,
+} from "./game/types";
 
 const SAVE_KEY = "uchronie-royaume-save";
 const TICK_MS = 450;
 const SPEEDS = [1, 2, 4];
-const ACCEPT_RE = /(accord|approuv|oui|entendu|d'accord|va pour|j'accepte|très bien)/i;
-const REFUSE_RE = /(refus|rejet|jamais|hors de question|\bnon\b)/i;
-
 const SUGGESTIONS = [
   "Construis une ferme",
   "Quels sont les devis pour une bibliothèque ?",
@@ -60,6 +64,7 @@ function stateSummary(s: GameState) {
     decouvertes: s.techs.map((t) => TECHS[t].name),
     lois_en_vigueur: s.decrets.map((d) => `${d.titre} (an ${d.year})`),
     demande_en_attente: s.demandeConseil?.texte ?? null,
+    strategie: STRATEGIES.find((x) => x.id === s.strategy)?.name ?? "Équilibre",
     village_autonome: s.autoDev,
     batiments_disponibles: (
       Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
@@ -78,6 +83,7 @@ export default function App() {
       saved.techs = saved.techs ?? [];
       saved.decrets = saved.decrets ?? [];
       if (!saved.demandeConseil) saved.demandeConseil = null;
+      if (!saved.strategy) saved.strategy = "equilibre";
       saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
@@ -207,42 +213,15 @@ export default function App() {
     if (!text || sending) return;
     setOrder("");
 
-    if (state.demandeConseil) {
-      const demande = DEMANDES_CONSEIL[state.demandeConseil.ref];
-      const accept = ACCEPT_RE.test(text);
-      const refuse = REFUSE_RE.test(text);
-      if (demande && (accept || refuse)) {
-        const out = accept ? demande.accorder : demande.refuser;
-        setState((s) => {
-          const next: GameState = {
-            ...s,
-            resources: { ...s.resources },
-            events: [...s.events],
-            demandeConseil: null,
-          };
-          applyEffets(next, out.effets);
-          const ev = {
-            id: next.nextEventId++,
-            year: next.year,
-            kind: out.kind,
-            text: out.text,
-          };
-          next.events.push(ev);
-          if (!narrated.current.has(ev.id)) {
-            narrated.current.add(ev.id);
-            void narrate(next, ev).then((t) => pushChronicle(ev.year, t));
-          }
-          return next;
-        });
-        return;
-      }
-    }
-
+    const hadDemande = state.demandeConseil;
     setSending(true);
     try {
       const res = await sendOrder(text, stateSummary(state));
       if (res.reponse) pushChronicle(state.year, `🖋️ ${res.reponse}`);
       applyAction(res.action);
+      if (hadDemande) {
+        setState((s) => (s.demandeConseil ? { ...s, demandeConseil: null } : s));
+      }
     } catch (err) {
       pushChronicle(
         state.year,
@@ -255,15 +234,35 @@ export default function App() {
 
   function applyEffets(s: GameState, e: Record<string, number> | undefined) {
     if (!e) return;
+    const clamp = (v: number, max: number) => Math.max(-max, Math.min(max, Math.round(v)));
     const r = s.resources;
-    r.nourriture = Math.max(0, Math.min(500, r.nourriture + (e.nourriture ?? 0)));
-    r.bois = Math.max(0, Math.min(999, r.bois + (e.bois ?? 0)));
-    r.pierre = Math.max(0, Math.min(999, r.pierre + (e.pierre ?? 0)));
-    r.or = Math.max(0, Math.min(999, r.or + (e.or ?? 0)));
-    r.foi = Math.max(0, Math.min(100, r.foi + (e.foi ?? 0)));
-    r.science = Math.max(0, Math.min(999, r.science + (e.science ?? 0)));
-    s.moral = Math.max(0, Math.min(100, s.moral + (e.moral ?? 0)));
-    s.population = Math.max(0, s.population + (e.pop ?? 0));
+    r.nourriture = Math.max(0, Math.min(500, r.nourriture + clamp(e.nourriture ?? 0, 20)));
+    r.bois = Math.max(0, Math.min(999, r.bois + clamp(e.bois ?? 0, 20)));
+    r.pierre = Math.max(0, Math.min(999, r.pierre + clamp(e.pierre ?? 0, 20)));
+    r.or = Math.max(0, Math.min(999, r.or + clamp(e.or ?? 0, 20)));
+    r.foi = Math.max(0, Math.min(100, r.foi + clamp(e.foi ?? 0, 15)));
+    r.science = Math.max(0, Math.min(999, r.science + clamp(e.science ?? 0, 20)));
+    s.moral = Math.max(0, Math.min(100, s.moral + clamp(e.moral ?? 0, 15)));
+    s.population = Math.max(0, s.population + clamp(e.pop ?? 0, 6));
+  }
+
+  function setStrategy(id: StrategyId) {
+    setState((s) => {
+      if (s.strategy === id) return s;
+      const next: GameState = { ...s, strategy: id, events: [...s.events] };
+      const ev = {
+        id: next.nextEventId++,
+        year: next.year,
+        kind: "info" as const,
+        text: `🎯 Le seigneur adopte la stratégie « ${STRATEGIES.find((x) => x.id === id)?.name ?? id} » (macro). La tactique et le micro restent aux hommes et aux villageois.`,
+      };
+      next.events.push(ev);
+      if (!narrated.current.has(ev.id)) {
+        narrated.current.add(ev.id);
+        pushChronicle(ev.year, ev.text);
+      }
+      return next;
+    });
   }
 
   function applyAction(action: OrderAction | undefined) {
@@ -427,6 +426,24 @@ export default function App() {
               ))}
             </div>
           </form>
+
+          <div className="card strategy-card">
+            <h2>🎯 Stratégie (macro)</h2>
+            <p className="strategy-hint">
+              Vous fixez la stratégie. La tactique et le micro, ce sont vos hommes et les villageois qui les mènent.
+            </p>
+            {STRATEGIES.map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                className={`strategy-btn${state.strategy === st.id ? " active" : ""}`}
+                title={st.desc}
+                onClick={() => setStrategy(st.id)}
+              >
+                {st.emoji} {st.name}
+              </button>
+            ))}
+          </div>
 
           <div className="card controls-card">
             <h2>⚙️ Le royaume</h2>

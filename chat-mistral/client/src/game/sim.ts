@@ -7,6 +7,7 @@ import type {
   GameState,
   Resources,
   Season,
+  StrategyId,
   TechId,
 } from "./types";
 
@@ -71,6 +72,26 @@ export const TECHS: Record<TechId, { emoji: string; name: string; cost: number; 
   imprimerie: { emoji: "🖨️", name: "Imprimerie", cost: 60, desc: "+2 📖 par mois : le savoir se répand (uchronie !)" },
 };
 
+export const STRATEGIES: { id: StrategyId; emoji: string; name: string; desc: string }[] = [
+  { id: "equilibre", emoji: "⚖️", name: "Équilibre", desc: "Aucune orientation particulière" },
+  { id: "prospérité", emoji: "💰", name: "Prospérité", desc: "Marchés et ateliers produisent ×1,5" },
+  { id: "foi", emoji: "⛪", name: "Foi", desc: "L'Église fait gagner ×2 de foi" },
+  { id: "défense", emoji: "🛡️", name: "Défense", desc: "Défense +2, pertes de guerre −25 %" },
+  { id: "savoir", emoji: "📖", name: "Savoir", desc: "La science progresse ×1,5" },
+  { id: "expansion", emoji: "🌾", name: "Expansion", desc: "La population croît plus vite" },
+];
+
+export const COUNCIL_PROPOSALS = [
+  "taxer davantage les marchés pour remplir les caisses du royaume",
+  "organiser de grandes prières publiques pour apaiser le ciel",
+  "lever une milice permanente pour protéger les routes",
+  "fonder une école pour instruire les enfants du bourg",
+  "autoriser les défrichements pour agrandir les terres labourables",
+  "interdire les jeux de hasard dans les auberges",
+  "subventionner les fermes pour nourrir plus de bouches",
+  "réparer les remparts du château",
+];
+
 const SEASONS: Season[] = ["Printemps", "Été", "Automne", "Hiver"];
 const SEASON_FOOD = [1.2, 1.6, 1.0, 0.4];
 
@@ -90,7 +111,8 @@ export function defense(s: GameState): number {
   return (
     (countDone(s, "château") > 0 ? 2 : 0) +
     countDone(s, "tour") +
-    (s.techs?.includes("remparts") ? 4 : 0)
+    (s.techs?.includes("remparts") ? 4 : 0) +
+    (s.strategy === "défense" ? 2 : 0)
   );
 }
 
@@ -110,6 +132,7 @@ export function createGame(): GameState {
     buildings: [{ type: "château", x: 4, y: 3, progress: 1, done: true }],
     decrets: [],
     demandeConseil: null,
+    strategy: "equilibre",
     events: [
       {
         id: 0,
@@ -180,38 +203,6 @@ function autoDevelop(s: GameState): GameEvent | null {
   };
 }
 
-export const DEMANDES_CONSEIL: {
-  texte: string;
-  accorder: { text: string; kind: EventKind; effets: Record<string, number> };
-  refuser: { text: string; kind: EventKind; effets: Record<string, number> };
-}[] = [
-  {
-    texte: "réparer le puits du village (5 🪨)",
-    accorder: { text: "Le puits est réparé, l'eau redevient claire (+3 moral).", kind: "joy", effets: { pierre: -5, moral: 3 } },
-    refuser: { text: "Le puits reste en piteux état ; les villageois râlent (-3 moral).", kind: "danger", effets: { moral: -3 } },
-  },
-  {
-    texte: "instaurer une foire mensuelle (8 💰)",
-    accorder: { text: "La foire attire les marchands de toute la région (net +6 or, +4 moral).", kind: "joy", effets: { or: 6, moral: 4 } },
-    refuser: { text: "Pas de foire cette année ; les commerçants boudent (-3 moral).", kind: "danger", effets: { moral: -3 } },
-  },
-  {
-    texte: "payer la rançon d'un pèlerin enlevé par des brigands (12 💰)",
-    accorder: { text: "Le pèlerin rentre sain et sauf ; sa famille bénit le seigneur (+8 foi, +4 moral).", kind: "joy", effets: { or: -12, foi: 8, moral: 4 } },
-    refuser: { text: "La famille du pèlerin maudit le seigneur (-6 foi, -4 moral).", kind: "danger", effets: { foi: -6, moral: -4 } },
-  },
-  {
-    texte: "autoriser le défrichement d'un lopin de forêt communale (6 🪵 gagnés)",
-    accorder: { text: "Le lopin est défriché : +6 bois, les paysans remercient (+3 moral).", kind: "joy", effets: { bois: 6, moral: 3 } },
-    refuser: { text: "Refus du seigneur : les paysans murmurant contre la forêt sacrée (-4 foi).", kind: "danger", effets: { foi: -4 } },
-  },
-  {
-    texte: "offrir un banquet aux anciens pour les fêtes (10 🍞)",
-    accorder: { text: "Les anciens trinquent au seigneur : +8 moral, +3 foi.", kind: "joy", effets: { nourriture: -10, moral: 8, foi: 3 } },
-    refuser: { text: "Les anciens sont vexés d'être ignorés (-5 moral).", kind: "danger", effets: { moral: -5 } },
-  },
-];
-
 const VILLAGE_DECISIONS: ((s: GameState) => GameEvent | null)[] = [
   (s) => {
     if (s.resources.bois < 5) return null;
@@ -270,7 +261,7 @@ function randomEvent(s: GameState): GameEvent | null {
   if (roll < 0.032) {
     const atk = 10 + Math.floor(Math.random() * 20);
     const def = defense(s);
-    const loss = Math.max(0, atk - def * 4);
+    const loss = Math.max(0, Math.round((atk - def * 4) * (s.strategy === "défense" ? 0.75 : 1)));
     s.resources.or = Math.max(0, s.resources.or - loss);
     return mk(
       "danger",
@@ -353,29 +344,38 @@ export function step(s: GameState): GameEvent[] {
   s.resources.bois += Math.round(countDone(s, "cabane") * 3 * woodFactor);
   s.resources.pierre += countDone(s, "carrière") * 2;
 
-  const marketBonus = s.techs.includes("horlogerie") ? 1.5 : 1;
+  const strat = s.strategy;
+  const marketBonus =
+    (s.techs.includes("horlogerie") ? 1.5 : 1) * (strat === "prospérité" ? 1.5 : 1);
   const ateliers = countDone(s, "atelier");
   if (ateliers > 0 && s.resources.bois >= 2 && s.resources.pierre >= 1) {
     s.resources.bois -= 2;
     s.resources.pierre -= 1;
-    s.resources.or = Math.min(999, s.resources.or + 4 * ateliers);
+    s.resources.or = Math.min(
+      999,
+      s.resources.or + Math.round(4 * ateliers * (strat === "prospérité" ? 1.5 : 1))
+    );
   }
   s.resources.or = Math.min(
     999,
     s.resources.or + Math.round(countDone(s, "marché") * (1 + Math.floor(s.population / 20)) * marketBonus)
   );
-  s.resources.foi = Math.min(100, s.resources.foi + countDone(s, "église") * 0.5);
+  s.resources.foi = Math.min(
+    100,
+    s.resources.foi + countDone(s, "église") * (strat === "foi" ? 1 : 0.5)
+  );
   s.resources.or = Math.min(
     999,
     s.resources.or + countDone(s, "auberge") * (2 + Math.floor(s.moral / 30))
   );
 
   const scienceGain =
-    countDone(s, "scriptorium") * 1 +
-    countDone(s, "bibliothèque") * 2 +
-    countDone(s, "université") * 4 +
-    (s.techs.includes("imprimerie") ? 2 : 0);
-  s.resources.science = Math.min(999, s.resources.science + scienceGain);
+    (countDone(s, "scriptorium") * 1 +
+      countDone(s, "bibliothèque") * 2 +
+      countDone(s, "université") * 4 +
+      (s.techs.includes("imprimerie") ? 2 : 0)) *
+    (strat === "savoir" ? 1.5 : 1);
+  s.resources.science = Math.min(999, s.resources.science + Math.round(scienceGain));
 
   const auto = autoDevelop(s);
   if (auto) events.push(auto);
@@ -385,19 +385,14 @@ export function step(s: GameState): GameEvent[] {
     if (decision) events.push(decision);
   }
 
-  if (!s.demandeConseil && Math.random() < 0.1) {
-    const ref = Math.floor(Math.random() * DEMANDES_CONSEIL.length);
-    s.demandeConseil = {
-      id: s.nextEventId++,
-      year: y,
-      texte: DEMANDES_CONSEIL[ref].texte,
-      ref,
-    };
+  if (!s.demandeConseil && Math.random() < 0.08) {
+    const texte = pick(COUNCIL_PROPOSALS);
+    s.demandeConseil = { id: s.nextEventId++, year: y, texte };
     events.push({
       id: s.nextEventId++,
       year: y,
       kind: "info",
-      text: `🙇 Le conseil des anciens sollicite le seigneur : ${s.demandeConseil.texte}.`,
+      text: `🙇 Le conseil des anciens propose au seigneur : ${texte}.`,
     });
   }
 
@@ -414,7 +409,7 @@ export function step(s: GameState): GameEvent[] {
       text: `Famine : ${loss} âmes périssent de faim. Le moral s'effondre.`,
     });
   } else if (s.population < cap && s.resources.nourriture >= s.population) {
-    s.population += Math.min(2, cap - s.population);
+    s.population += Math.min(strat === "expansion" ? 3 : 2, cap - s.population);
     s.moral = Math.min(100, s.moral + 1);
   }
   s.moral = Math.max(0, s.moral - 0.2);

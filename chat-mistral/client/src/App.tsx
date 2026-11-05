@@ -68,6 +68,7 @@ export default function App() {
   });
   const [chronicle, setChronicle] = useState<ChronicleEntry[]>([]);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  const [showMap, setShowMap] = useState(false);
   const [order, setOrder] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -278,154 +279,163 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>🏰 Royaume de {state.kingdom}</h1>
+        <h1>🏰 {state.kingdom}</h1>
         <div className="subtitle">
           Maison {state.dynasty} — {state.ruler} — An {state.year} — {seasonOf(state.month)}
         </div>
+        <div className="resources">
+          <span className="chip">🍞 {Math.round(r.nourriture)}</span>
+          <span className="chip">👥 {state.population}/{housingCap(state)}</span>
+          <span className="chip">🪵 {Math.round(r.bois)}</span>
+          <span className="chip">🪨 {Math.round(r.pierre)}</span>
+          <span className="chip">💰 {Math.round(r.or)}</span>
+          <span className="chip">⛪ {Math.round(r.foi)}</span>
+          <span className="chip">📖 {Math.round(r.science)}</span>
+          <span className="chip">😊 {Math.round(state.moral)}</span>
+          <span className="chip">🛡️ {defense(state)}</span>
+        </div>
         <div className="controls">
           <button type="button" onClick={toggleRunning}>
-            {state.running ? "⏸ Pause" : "▶ Lecture"}
+            {state.running ? "⏸" : "▶"}
           </button>
           <button type="button" onClick={cycleSpeed}>
-            Vitesse ×{state.speed}
+            ×{state.speed}
           </button>
-          <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev}>
-            🏘️ Village autonome : {state.autoDev ? "oui" : "non"}
+          <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev} title="Village autonome">
+            🏘️
           </button>
-          <button type="button" onClick={newGame}>
-            Nouvelle chronique
+          <button type="button" onClick={() => setShowMap(true)} title="Voir le domaine">
+            🗺️
+          </button>
+          <button type="button" onClick={newGame} title="Nouvelle chronique">
+            ✨
           </button>
         </div>
       </header>
 
-      <div className="resources">
-        <span className="chip">🍞 {Math.round(r.nourriture)}</span>
-        <span className="chip">👥 {state.population}/{housingCap(state)}</span>
-        <span className="chip">🪵 {Math.round(r.bois)}</span>
-        <span className="chip">🪨 {Math.round(r.pierre)}</span>
-        <span className="chip">💰 {Math.round(r.or)}</span>
-        <span className="chip">⛪ {Math.round(r.foi)}</span>
-        <span className="chip">📖 {Math.round(r.science)}</span>
-        <span className="chip">😊 {Math.round(state.moral)}</span>
-        <span className="chip">🛡️ {defense(state)}</span>
-      </div>
-
-      <main className="game">
-        <section className="map">
-          {Array.from({ length: GRID_H }, (_, y) =>
-            Array.from({ length: GRID_W }, (_, x) => {
-              const b = buildingAt(state, x, y);
-              const isSelected = selected?.x === x && selected?.y === y;
-              return (
-                <button
-                  key={`${x}-${y}`}
-                  type="button"
-                  className={`tile${b ? " built" : ""}${isSelected ? " selected" : ""}`}
-                  onClick={() => setSelected(b ? null : { x, y })}
-                >
-                  {b ? (
-                    <>
-                      <span className="emoji">{BUILDING_CATALOG[b.type].emoji}</span>
-                      {!b.done && (
-                        <span className="progress">
-                          <span style={{ width: `${Math.round(b.progress * 100)}%` }} />
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="grass">🌿</span>
-                  )}
-                </button>
-              );
-            })
-          )}
-        </section>
-
-        <aside className="side">
-          <div className="research">
-            <h2>🔬 Sciences — 📖 {Math.round(r.science)}</h2>
-            {(Object.entries(TECHS) as [TechId, (typeof TECHS)[TechId]][])
-              .map(([id, t]) => ({ id, t, owned: state.techs.includes(id) }))
-              .map(({ id, t, owned }) => (
-                <div className="tech" key={id}>
-                  <span>
-                    {t.emoji} {t.name} <small>{t.desc}</small>
-                  </span>
-                  {owned ? (
-                    <em>acquise</em>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={r.science < t.cost}
-                      onClick={() => doResearch(id)}
-                    >
-                      Rechercher ({t.cost} 📖)
-                    </button>
-                  )}
-                </div>
-              ))}
-          </div>
-
-          {selected && !selectedBuilding && (
-            <div className="palette">
-              <h2>Construire en ({selected.x + 1}, {selected.y + 1})</h2>
-              {(
-                Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
-              )
-                .filter(([t]) => t !== "château")
-                .map(([t, cat]) => {
-                  const affordable =
-                    r.bois >= (cat.cost.bois ?? 0) &&
-                    r.pierre >= (cat.cost.pierre ?? 0) &&
-                    r.or >= (cat.cost.or ?? 0);
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      className="build-btn"
-                      disabled={!affordable}
-                      title={cat.desc}
-                      onClick={() => place(t)}
-                    >
-                      <span>{cat.emoji}</span> {cat.name}
-                      <small>
-                        {cat.cost.bois ? ` 🪵${cat.cost.bois}` : ""}
-                        {cat.cost.pierre ? ` 🪨${cat.cost.pierre}` : ""}
-                        {cat.cost.or ? ` 💰${cat.cost.or}` : ""}
-                      </small>
-                    </button>
-                  );
-                })}
-            </div>
-          )}
-
-          <div className="chronicle">
-            <h2>📜 Chronique</h2>
-            {chronicle.length === 0 && <p className="empty">Les siècles s'écoulent…</p>}
-            {[...chronicle].reverse().map((c, i) => (
-              <p key={i}>
-                <strong>An {c.year}</strong> — {c.text}
-              </p>
-            ))}
-          </div>
-        </aside>
+      <main className="page">
+        <div className="chronicle">
+          <h2>📜 Chronique du royaume de {state.kingdom}</h2>
+          {chronicle.length === 0 && <p className="empty">Les siècles s'écoulent…</p>}
+          {[...chronicle].reverse().map((c, i) => (
+            <p key={i}>
+              <strong>An {c.year}</strong> — {c.text}
+            </p>
+          ))}
+        </div>
       </main>
 
       <form className="orders" onSubmit={submitOrder}>
-        <h2>🖋️ Ordres du seigneur</h2>
-        <div className="order-row">
-          <input
-            type="text"
-            value={order}
-            onChange={(e) => setOrder(e.target.value)}
-            placeholder="Ex. : « Construis une ferme » ou « Améliore l'économie, que me proposez-vous ? »"
-            disabled={sending}
-          />
-          <button type="submit" disabled={sending || !order.trim()}>
-            {sending ? "Le héraut part…" : "Envoyer l'ordre ➤"}
-          </button>
-        </div>
+        <span className="quill">🖋️</span>
+        <input
+          type="text"
+          value={order}
+          onChange={(e) => setOrder(e.target.value)}
+          placeholder="Donnez vos ordres, seigneur… (ex. : « Construis une ferme » — « Améliore l'économie, que me proposez-vous ? »)"
+          disabled={sending}
+        />
+        <button type="submit" disabled={sending || !order.trim()}>
+          {sending ? "Le héraut part…" : "Envoyer ➤"}
+        </button>
       </form>
+
+      {showMap && (
+        <div className="overlay" onClick={() => setShowMap(false)}>
+          <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="overlay-head">
+              <h2>🗺️ Domaine de {state.kingdom}</h2>
+              <button type="button" onClick={() => setShowMap(false)}>
+                ✕ Fermer
+              </button>
+            </div>
+            <div className="map">
+              {Array.from({ length: GRID_H }, (_, y) =>
+                Array.from({ length: GRID_W }, (_, x) => {
+                  const b = buildingAt(state, x, y);
+                  const isSelected = selected?.x === x && selected?.y === y;
+                  return (
+                    <button
+                      key={`${x}-${y}`}
+                      type="button"
+                      className={`tile${b ? " built" : ""}${isSelected ? " selected" : ""}`}
+                      onClick={() => setSelected(b ? null : { x, y })}
+                    >
+                      {b ? (
+                        <>
+                          <span className="emoji">{BUILDING_CATALOG[b.type].emoji}</span>
+                          {!b.done && (
+                            <span className="progress">
+                              <span style={{ width: `${Math.round(b.progress * 100)}%` }} />
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="grass">🌿</span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            {selected && !selectedBuilding && (
+              <div className="palette">
+                <h3>Construire en ({selected.x + 1}, {selected.y + 1})</h3>
+                <div className="palette-grid">
+                  {(
+                    Object.entries(BUILDING_CATALOG) as [
+                      BuildingType,
+                      (typeof BUILDING_CATALOG)[BuildingType],
+                    ][]
+                  )
+                    .filter(([t]) => t !== "château")
+                    .map(([t, cat]) => {
+                      const affordable =
+                        r.bois >= (cat.cost.bois ?? 0) &&
+                        r.pierre >= (cat.cost.pierre ?? 0) &&
+                        r.or >= (cat.cost.or ?? 0);
+                      return (
+                        <button
+                          key={t}
+                          type="button"
+                          className="build-btn"
+                          disabled={!affordable}
+                          title={cat.desc}
+                          onClick={() => place(t)}
+                        >
+                          <span>{cat.emoji}</span> {cat.name}
+                          <small>
+                            {cat.cost.bois ? ` 🪵${cat.cost.bois}` : ""}
+                            {cat.cost.pierre ? ` 🪨${cat.cost.pierre}` : ""}
+                            {cat.cost.or ? ` 💰${cat.cost.or}` : ""}
+                          </small>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+            <div className="research">
+              <h3>🔬 Sciences — 📖 {Math.round(r.science)}</h3>
+              {(Object.entries(TECHS) as [TechId, (typeof TECHS)[TechId]][])
+                .map(([id, t]) => ({ id, t, owned: state.techs.includes(id) }))
+                .map(({ id, t, owned }) => (
+                  <div className="tech" key={id}>
+                    <span>
+                      {t.emoji} {t.name} <small>{t.desc}</small>
+                    </span>
+                    {owned ? (
+                      <em>acquise</em>
+                    ) : (
+                      <button type="button" disabled={r.science < t.cost} onClick={() => doResearch(id)}>
+                        Rechercher ({t.cost} 📖)
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -128,7 +128,7 @@ button:disabled {
 .chronicle {
   flex: 1;
   overflow-y: auto;
-  max-height: calc(100vh - 210px);
+  max-height: calc(100vh - 280px);
   min-height: 300px;
   padding: 1.2rem 1.6rem;
   border-radius: 4px;
@@ -178,13 +178,41 @@ button:disabled {
   position: sticky;
   bottom: 0;
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.7rem 0.9rem;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.55rem 0.9rem 0.7rem;
   margin: 0 -1rem;
   background: linear-gradient(180deg, #4a3520, var(--bois-fonce));
   border-top: 2px solid var(--or-clair);
   box-shadow: 0 -6px 18px rgba(40, 26, 8, 0.45);
+}
+
+.suggestions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.suggestion {
+  font-variant: normal;
+  font-size: 0.78rem;
+  font-style: italic;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 160, 23, 0.6);
+  background: rgba(250, 242, 221, 0.12);
+  color: #e8d9b5;
+  box-shadow: none;
+}
+
+.suggestion:hover:not(:disabled) {
+  background: rgba(250, 242, 221, 0.28);
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .orders .quill {
@@ -194,7 +222,7 @@ button:disabled {
 .orders input {
   flex: 1;
   font-family: inherit;
-  font-size: 1.02rem;
+  font-size: 1.05rem;
   font-style: italic;
   padding: 0.6rem 0.9rem;
   border-radius: 9px;
@@ -203,7 +231,12 @@ button:disabled {
   color: var(--encre);
 }
 
-.orders button {
+.orders input:focus {
+  outline: 3px solid var(--or-clair);
+  outline-offset: -1px;
+}
+
+.orders .order-row > button {
   background: linear-gradient(180deg, #e0b23f, var(--or-clair));
   color: #33270f;
   white-space: nowrap;

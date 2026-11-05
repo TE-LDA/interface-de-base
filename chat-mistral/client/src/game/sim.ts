@@ -18,18 +18,18 @@ export const BUILDING_CATALOG: Record<
   { emoji: string; name: string; cost: Partial<Resources>; buildMonths: number; desc: string }
 > = {
   château: { emoji: "🏰", name: "Château", cost: {}, buildMonths: 0, desc: "Cœur du royaume" },
-  ferme: { emoji: "🌾", name: "Ferme", cost: { bois: 20, pierre: 10 }, buildMonths: 6, desc: "Nourrit le royaume" },
-  moulin: { emoji: "🍞", name: "Moulin", cost: { bois: 30, pierre: 25 }, buildMonths: 8, desc: "Mouture, surtout en été" },
-  maison: { emoji: "🏠", name: "Maison", cost: { bois: 15, pierre: 10 }, buildMonths: 4, desc: "Loge 6 âmes" },
-  église: { emoji: "⛪", name: "Église", cost: { pierre: 40, or: 10 }, buildMonths: 10, desc: "Ferveur et calme" },
-  atelier: { emoji: "🔨", name: "Atelier", cost: { bois: 20, pierre: 20 }, buildMonths: 6, desc: "Bois et pierre en or" },
-  marché: { emoji: "⚖️", name: "Marché", cost: { bois: 25, or: 15 }, buildMonths: 6, desc: "Prospère avec le peuple" },
-  tour: { emoji: "🗼", name: "Tour de guet", cost: { pierre: 35 }, buildMonths: 8, desc: "Protège des pillards" },
-  cabane: { emoji: "🪓", name: "Cabane de bûcherons", cost: { pierre: 10, or: 5 }, buildMonths: 4, desc: "+3 bois par mois" },
-  carrière: { emoji: "⛏️", name: "Carrière", cost: { bois: 15, or: 10 }, buildMonths: 8, desc: "+2 pierre par mois" },
-  scriptorium: { emoji: "📜", name: "Scriptorium", cost: { bois: 20, pierre: 25, or: 10 }, buildMonths: 8, desc: "+1 📖 par mois" },
-  bibliothèque: { emoji: "📚", name: "Bibliothèque", cost: { bois: 30, pierre: 35, or: 25 }, buildMonths: 12, desc: "+2 📖 par mois" },
-  université: { emoji: "🎓", name: "Université", cost: { bois: 30, pierre: 50, or: 40 }, buildMonths: 16, desc: "+4 📖 par mois" },
+  ferme: { emoji: "🌾", name: "Ferme", cost: { bois: 10, pierre: 5 }, buildMonths: 6, desc: "Nourrit le royaume" },
+  moulin: { emoji: "🍞", name: "Moulin", cost: { bois: 15, pierre: 12 }, buildMonths: 8, desc: "Mouture, surtout en été" },
+  maison: { emoji: "🏠", name: "Maison", cost: { bois: 8, pierre: 5 }, buildMonths: 4, desc: "Loge 6 âmes" },
+  église: { emoji: "⛪", name: "Église", cost: { pierre: 20, or: 5 }, buildMonths: 10, desc: "Ferveur et calme" },
+  atelier: { emoji: "🔨", name: "Atelier", cost: { bois: 10, pierre: 10 }, buildMonths: 6, desc: "Bois et pierre en or" },
+  marché: { emoji: "⚖️", name: "Marché", cost: { bois: 12, or: 8 }, buildMonths: 6, desc: "Prospère avec le peuple" },
+  tour: { emoji: "🗼", name: "Tour de guet", cost: { pierre: 18 }, buildMonths: 8, desc: "Protège des pillards" },
+  cabane: { emoji: "🪓", name: "Cabane de bûcherons", cost: { pierre: 5, or: 2 }, buildMonths: 4, desc: "+3 bois par mois" },
+  carrière: { emoji: "⛏️", name: "Carrière", cost: { bois: 8, or: 5 }, buildMonths: 8, desc: "+2 pierre par mois" },
+  scriptorium: { emoji: "📜", name: "Scriptorium", cost: { bois: 10, pierre: 12, or: 5 }, buildMonths: 8, desc: "+1 📖 par mois" },
+  bibliothèque: { emoji: "📚", name: "Bibliothèque", cost: { bois: 15, pierre: 18, or: 12 }, buildMonths: 12, desc: "+2 📖 par mois" },
+  université: { emoji: "🎓", name: "Université", cost: { bois: 15, pierre: 25, or: 20 }, buildMonths: 16, desc: "+4 📖 par mois" },
 };
 
 export const TECHS: Record<TechId, { emoji: string; name: string; cost: number; desc: string }> = {

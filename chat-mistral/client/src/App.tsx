@@ -20,6 +20,13 @@ import type { BuildingType, ChronicleEntry, GameState, OrderAction, TechId } fro
 const SAVE_KEY = "uchronie-royaume-save";
 const TICK_MS = 450;
 const SPEEDS = [1, 2, 4];
+const SUGGESTIONS = [
+  "Construis une ferme",
+  "Quels sont les devis pour une bibliothèque ?",
+  "Améliore l'économie : que me proposez-vous ?",
+  "Promulgue une charte des libertés pour le bourg",
+  "Fonde un ordre militaire pour défendre les frontières",
+];
 
 function load(): GameState | null {
   try {
@@ -73,6 +80,7 @@ export default function App() {
   const [showMap, setShowMap] = useState(false);
   const [order, setOrder] = useState("");
   const [sending, setSending] = useState(false);
+  const chronicleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!state.running) return;
@@ -110,6 +118,11 @@ export default function App() {
       // stockage indisponible : la partie reste en mémoire
     }
   }, [state]);
+
+  useEffect(() => {
+    const el = chronicleRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chronicle.length]);
 
   function pushChronicle(year: number, text: string) {
     setChronicle((c) => [...c, { year, text }]);
@@ -319,28 +332,28 @@ export default function App() {
         </div>
         <div className="controls">
           <button type="button" onClick={toggleRunning}>
-            {state.running ? "⏸" : "▶"}
+            {state.running ? "⏸ Pause" : "▶ Reprendre"}
           </button>
-          <button type="button" onClick={cycleSpeed}>
-            ×{state.speed}
+          <button type="button" onClick={cycleSpeed} title="Vitesse de simulation">
+            Vitesse ×{state.speed}
           </button>
-          <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev} title="Village autonome">
-            🏘️
+          <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev} title="Le village se développe tout seul">
+            🏘️ Auto : {state.autoDev ? "oui" : "non"}
           </button>
-          <button type="button" onClick={() => setShowMap(true)} title="Voir le domaine">
-            🗺️
+          <button type="button" onClick={() => setShowMap(true)} title="Carte du domaine, lois et sciences">
+            🗺️ Domaine
           </button>
-          <button type="button" onClick={newGame} title="Nouvelle chronique">
-            ✨
+          <button type="button" onClick={newGame} title="Recommencer une nouvelle uchronie">
+            ✨ Nouveau
           </button>
         </div>
       </header>
 
       <main className="page">
-        <div className="chronicle">
+        <div className="chronicle" ref={chronicleRef}>
           <h2>📜 Chronique du royaume de {state.kingdom}</h2>
           {chronicle.length === 0 && <p className="empty">Les siècles s'écoulent…</p>}
-          {[...chronicle].reverse().map((c, i) => (
+          {chronicle.map((c, i) => (
             <p key={i}>
               <strong>An {c.year}</strong> — {c.text}
             </p>
@@ -349,17 +362,27 @@ export default function App() {
       </main>
 
       <form className="orders" onSubmit={submitOrder}>
-        <span className="quill">🖋️</span>
-        <input
-          type="text"
-          value={order}
-          onChange={(e) => setOrder(e.target.value)}
-          placeholder="Donnez vos ordres, seigneur… (ex. : « Construis une ferme » — « Améliore l'économie, que me proposez-vous ? »)"
-          disabled={sending}
-        />
-        <button type="submit" disabled={sending || !order.trim()}>
-          {sending ? "Le héraut part…" : "Envoyer ➤"}
-        </button>
+        <div className="suggestions">
+          {SUGGESTIONS.map((s) => (
+            <button key={s} type="button" className="suggestion" onClick={() => setOrder(s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+        <div className="order-row">
+          <span className="quill">🖋️</span>
+          <input
+            type="text"
+            value={order}
+            onChange={(e) => setOrder(e.target.value)}
+            placeholder="Donnez vos ordres, seigneur… (Entrée ⏎ pour envoyer)"
+            disabled={sending}
+            autoFocus
+          />
+          <button type="submit" disabled={sending || !order.trim()}>
+            {sending ? "Le héraut part…" : "Envoyer ➤"}
+          </button>
+        </div>
       </form>
 
       {showMap && (

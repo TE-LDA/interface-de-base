@@ -13,7 +13,8 @@ export type BuildingType =
   | "carrière"
   | "scriptorium"
   | "bibliothèque"
-  | "université";
+  | "université"
+  | "auberge";
 
 export type TechId = "assollement" | "horlogerie" | "medecine" | "remparts" | "imprimerie";
 
@@ -59,10 +60,18 @@ export interface Decret {
 export interface OrderAction {
   type: "build" | "ressources" | "decret" | "rien";
   batiment?: string;
+  quantite?: number;
   devis?: OrderDevis;
   titre?: string;
   texte?: string;
   effets?: Record<string, number>;
+}
+
+export interface DemandeConseil {
+  id: number;
+  year: number;
+  texte: string;
+  ref: number;
 }
 
 export interface OrderResponse {
@@ -82,6 +91,7 @@ export interface GameState {
   buildings: Building[];
   events: GameEvent[];
   decrets: Decret[];
+  demandeConseil: DemandeConseil | null;
   techs: TechId[];
   nextEventId: number;
   running: boolean;

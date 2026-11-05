@@ -3,6 +3,7 @@ import { sendOrder } from "./api";
 import { narrate } from "./game/chronicle";
 import {
   BUILDING_CATALOG,
+  DEMANDES_CONSEIL,
   GRID_H,
   GRID_W,
   TECHS,
@@ -11,15 +12,20 @@ import {
   defense,
   freeTiles,
   housingCap,
+  quote,
   research,
   seasonOf,
   step,
+  unitCost,
 } from "./game/sim";
 import type { BuildingType, ChronicleEntry, GameState, OrderAction, TechId } from "./game/types";
 
 const SAVE_KEY = "uchronie-royaume-save";
 const TICK_MS = 450;
 const SPEEDS = [1, 2, 4];
+const ACCEPT_RE = /(accord|approuv|oui|entendu|d'accord|va pour|j'accepte|très bien)/i;
+const REFUSE_RE = /(refus|rejet|jamais|hors de question|\bnon\b)/i;
+
 const SUGGESTIONS = [
   "Construis une ferme",
   "Quels sont les devis pour une bibliothèque ?",
@@ -53,6 +59,7 @@ function stateSummary(s: GameState) {
     ),
     decouvertes: s.techs.map((t) => TECHS[t].name),
     lois_en_vigueur: s.decrets.map((d) => `${d.titre} (an ${d.year})`),
+    demande_en_attente: s.demandeConseil?.texte ?? null,
     village_autonome: s.autoDev,
     batiments_disponibles: (
       Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
@@ -70,6 +77,7 @@ export default function App() {
       if (typeof saved.autoDev !== "boolean") saved.autoDev = true;
       saved.techs = saved.techs ?? [];
       saved.decrets = saved.decrets ?? [];
+      if (!saved.demandeConseil) saved.demandeConseil = null;
       saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
@@ -153,22 +161,19 @@ export default function App() {
 
   function place(type: BuildingType) {
     if (!selected) return;
-    const cat = BUILDING_CATALOG[type];
+    const owned = state.buildings.filter((b) => b.type === type).length;
+    const cost = unitCost(type, owned);
     const r = state.resources;
-    if (
-      r.bois < (cat.cost.bois ?? 0) ||
-      r.pierre < (cat.cost.pierre ?? 0) ||
-      r.or < (cat.cost.or ?? 0)
-    ) {
+    if (r.bois < cost.bois || r.pierre < cost.pierre || r.or < cost.or) {
       return;
     }
     setState((s) => ({
       ...s,
       resources: {
         ...s.resources,
-        bois: s.resources.bois - (cat.cost.bois ?? 0),
-        pierre: s.resources.pierre - (cat.cost.pierre ?? 0),
-        or: s.resources.or - (cat.cost.or ?? 0),
+        bois: s.resources.bois - cost.bois,
+        pierre: s.resources.pierre - cost.pierre,
+        or: s.resources.or - cost.or,
       },
       buildings: [...s.buildings, { type, x: selected.x, y: selected.y, progress: 0, done: false }],
     }));
@@ -201,6 +206,38 @@ export default function App() {
     const text = order.trim();
     if (!text || sending) return;
     setOrder("");
+
+    if (state.demandeConseil) {
+      const demande = DEMANDES_CONSEIL[state.demandeConseil.ref];
+      const accept = ACCEPT_RE.test(text);
+      const refuse = REFUSE_RE.test(text);
+      if (demande && (accept || refuse)) {
+        const out = accept ? demande.accorde : demande.refuser;
+        setState((s) => {
+          const next: GameState = {
+            ...s,
+            resources: { ...s.resources },
+            events: [...s.events],
+            demandeConseil: null,
+          };
+          applyEffets(next, out.effets);
+          const ev = {
+            id: next.nextEventId++,
+            year: next.year,
+            kind: out.kind,
+            text: out.text,
+          };
+          next.events.push(ev);
+          if (!narrated.current.has(ev.id)) {
+            narrated.current.add(ev.id);
+            void narrate(next, ev).then((t) => pushChronicle(ev.year, t));
+          }
+          return next;
+        });
+        return;
+      }
+    }
+
     setSending(true);
     try {
       const res = await sendOrder(text, stateSummary(state));
@@ -239,25 +276,28 @@ export default function App() {
       );
       if (!key) return;
       const cat = BUILDING_CATALOG[key];
+      const q = Math.max(1, Math.min(12, Math.floor(action.quantite ?? 1)));
+      const owned = state.buildings.filter((b) => b.type === key).length;
+      const total = quote(key, owned, q);
       const r = state.resources;
-      const cost = { bois: cat.cost.bois ?? 0, pierre: cat.cost.pierre ?? 0, or: cat.cost.or ?? 0 };
       const missing = {
-        bois: Math.max(0, cost.bois - Math.floor(r.bois)),
-        pierre: Math.max(0, cost.pierre - Math.floor(r.pierre)),
-        or: Math.max(0, cost.or - Math.floor(r.or)),
+        bois: Math.max(0, total.bois - Math.floor(r.bois)),
+        pierre: Math.max(0, total.pierre - Math.floor(r.pierre)),
+        or: Math.max(0, total.or - Math.floor(r.or)),
       };
       const afford = missing.bois === 0 && missing.pierre === 0 && missing.or === 0;
       pushChronicle(
         state.year,
-        `📐 Devis de l'architecte — ${cat.emoji} ${cat.name} : 🪵${cost.bois} 🪨${cost.pierre} 💰${cost.or} | vos ressources : 🪵${Math.floor(r.bois)} 🪨${Math.floor(r.pierre)} 💰${Math.floor(r.or)} → ${
+        `📐 Devis de l'architecte — ${cat.emoji} ${cat.name}${q > 1 ? ` ×${q}` : ""} : 🪵${total.bois} 🪨${total.pierre} 💰${total.or} (tarif dégressif, ${owned} déjà possédé${owned > 1 ? "s" : ""}) | vos ressources : 🪵${Math.floor(r.bois)} 🪨${Math.floor(r.pierre)} 💰${Math.floor(r.or)} → ${
           afford ? "✅ abordable, les travaux commencent" : `❌ insuffisant (il manque 🪵${missing.bois} 🪨${missing.pierre} 💰${missing.or})`
         }.`
       );
       if (!afford) return;
       setState((s) => {
         const tiles = freeTiles(s);
-        if (tiles.length === 0) return s;
-        const t = tiles[Math.floor(Math.random() * tiles.length)];
+        const placed = Math.min(q, tiles.length);
+        if (placed === 0) return s;
+        const cost = quote(key, s.buildings.filter((b) => b.type === key).length, placed);
         const next: GameState = {
           ...s,
           resources: {
@@ -266,14 +306,19 @@ export default function App() {
             pierre: s.resources.pierre - cost.pierre,
             or: s.resources.or - cost.or,
           },
-          buildings: [...s.buildings, { type: key, x: t.x, y: t.y, progress: 0, done: false }],
+          buildings: [...s.buildings],
           events: [...s.events],
         };
+        for (let i = 0; i < placed; i++) {
+          const t = tiles[Math.floor(Math.random() * tiles.length)];
+          next.buildings.push({ type: key, x: t.x, y: t.y, progress: 0, done: false });
+          tiles.splice(tiles.indexOf(t), 1);
+        }
         const ev = {
           id: next.nextEventId++,
           year: next.year,
           kind: "joy" as const,
-          text: `Par ordre du seigneur, on bâtit : ${cat.name}.`,
+          text: `Par ordre du seigneur, on bâtit ${placed > 1 ? `${placed} ${cat.name.toLowerCase()}s` : `une ${cat.name.toLowerCase()}`}.`,
         };
         next.events.push(ev);
         if (!narrated.current.has(ev.id)) {
@@ -362,6 +407,11 @@ export default function App() {
       </main>
 
       <form className="orders" onSubmit={submitOrder}>
+        {state.demandeConseil && (
+          <div className="demande-banner">
+            🙇 Le conseil des anciens attend votre réponse : « {state.demandeConseil.texte} » — répondez par exemple « accorde » ou « refuse ».
+          </div>
+        )}
         <div className="suggestions">
           {SUGGESTIONS.map((s) => (
             <button key={s} type="button" className="suggestion" onClick={() => setOrder(s)}>
@@ -435,24 +485,24 @@ export default function App() {
                   )
                     .filter(([t]) => t !== "château")
                     .map(([t, cat]) => {
+                      const owned = state.buildings.filter((b) => b.type === t).length;
+                      const cost = unitCost(t, owned);
                       const affordable =
-                        r.bois >= (cat.cost.bois ?? 0) &&
-                        r.pierre >= (cat.cost.pierre ?? 0) &&
-                        r.or >= (cat.cost.or ?? 0);
+                        r.bois >= cost.bois && r.pierre >= cost.pierre && r.or >= cost.or;
                       return (
                         <button
                           key={t}
                           type="button"
                           className="build-btn"
                           disabled={!affordable}
-                          title={cat.desc}
+                          title={`${cat.desc} — tarif actuel dégressif (${owned} possédé${owned > 1 ? "s" : ""})`}
                           onClick={() => place(t)}
                         >
                           <span>{cat.emoji}</span> {cat.name}
                           <small>
-                            {cat.cost.bois ? ` 🪵${cat.cost.bois}` : ""}
-                            {cat.cost.pierre ? ` 🪨${cat.cost.pierre}` : ""}
-                            {cat.cost.or ? ` 💰${cat.cost.or}` : ""}
+                            {cost.bois ? ` 🪵${cost.bois}` : ""}
+                            {cost.pierre ? ` 🪨${cost.pierre}` : ""}
+                            {cost.or ? ` 💰${cost.or}` : ""}
                           </small>
                         </button>
                       );

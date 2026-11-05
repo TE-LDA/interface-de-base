@@ -30,7 +30,38 @@ export const BUILDING_CATALOG: Record<
   scriptorium: { emoji: "📜", name: "Scriptorium", cost: { bois: 10, pierre: 12, or: 5 }, buildMonths: 8, desc: "+1 📖 par mois" },
   bibliothèque: { emoji: "📚", name: "Bibliothèque", cost: { bois: 15, pierre: 18, or: 12 }, buildMonths: 12, desc: "+2 📖 par mois" },
   université: { emoji: "🎓", name: "Université", cost: { bois: 15, pierre: 25, or: 20 }, buildMonths: 16, desc: "+4 📖 par mois" },
+  auberge: { emoji: "🍺", name: "Auberge", cost: { bois: 15, pierre: 15, or: 10 }, buildMonths: 8, desc: "Or selon le moral et la foi" },
 };
+
+export function unitCost(
+  type: BuildingType,
+  owned: number
+): { bois: number; pierre: number; or: number } {
+  const cat = BUILDING_CATALOG[type];
+  const factor = Math.max(0.5, Math.pow(0.9, owned));
+  return {
+    bois: Math.ceil((cat.cost.bois ?? 0) * factor),
+    pierre: Math.ceil((cat.cost.pierre ?? 0) * factor),
+    or: Math.ceil((cat.cost.or ?? 0) * factor),
+  };
+}
+
+export function quote(
+  type: BuildingType,
+  owned: number,
+  q: number
+): { bois: number; pierre: number; or: number } {
+  let bois = 0;
+  let pierre = 0;
+  let or = 0;
+  for (let i = 0; i < q; i++) {
+    const c = unitCost(type, owned + i);
+    bois += c.bois;
+    pierre += c.pierre;
+    or += c.or;
+  }
+  return { bois, pierre, or };
+}
 
 export const TECHS: Record<TechId, { emoji: string; name: string; cost: number; desc: string }> = {
   assollement: { emoji: "🌾", name: "Assollement triennal", cost: 20, desc: "Les fermes produisent +50% de nourriture" },
@@ -78,6 +109,7 @@ export function createGame(): GameState {
     moral: 70,
     buildings: [{ type: "château", x: 4, y: 3, progress: 1, done: true }],
     decrets: [],
+    demandeConseil: null,
     events: [
       {
         id: 0,
@@ -147,6 +179,38 @@ function autoDevelop(s: GameState): GameEvent | null {
     text: `Les villageois élèvent : ${cat.name.toLowerCase()}.`,
   };
 }
+
+export const DEMANDES_CONSEIL: {
+  texte: string;
+  accorder: { text: string; kind: EventKind; effets: Record<string, number> };
+  refuser: { text: string; kind: EventKind; effets: Record<string, number> };
+}[] = [
+  {
+    texte: "réparer le puits du village (5 🪨)",
+    accorder: { text: "Le puits est réparé, l'eau redevient claire (+3 moral).", kind: "joy", effets: { pierre: -5, moral: 3 } },
+    refuser: { text: "Le puits reste en piteux état ; les villageois râlent (-3 moral).", kind: "danger", effets: { moral: -3 } },
+  },
+  {
+    texte: "instaurer une foire mensuelle (8 💰)",
+    accorder: { text: "La foire attire les marchands de toute la région (net +6 or, +4 moral).", kind: "joy", effets: { or: 6, moral: 4 } },
+    refuser: { text: "Pas de foire cette année ; les commerçants boudent (-3 moral).", kind: "danger", effets: { moral: -3 } },
+  },
+  {
+    texte: "payer la rançon d'un pèlerin enlevé par des brigands (12 💰)",
+    accorder: { text: "Le pèlerin rentre sain et sauf ; sa famille bénit le seigneur (+8 foi, +4 moral).", kind: "joy", effets: { or: -12, foi: 8, moral: 4 } },
+    refuser: { text: "La famille du pèlerin maudit le seigneur (-6 foi, -4 moral).", kind: "danger", effets: { foi: -6, moral: -4 } },
+  },
+  {
+    texte: "autoriser le défrichement d'un lopin de forêt communale (6 🪵 gagnés)",
+    accorder: { text: "Le lopin est défriché : +6 bois, les paysans remercient (+3 moral).", kind: "joy", effets: { bois: 6, moral: 3 } },
+    refuser: { text: "Refus du seigneur : les paysans murmurant contre la forêt sacrée (-4 foi).", kind: "danger", effets: { foi: -4 } },
+  },
+  {
+    texte: "offrir un banquet aux anciens pour les fêtes (10 🍞)",
+    accorder: { text: "Les anciens trinquent au seigneur : +8 moral, +3 foi.", kind: "joy", effets: { nourriture: -10, moral: 8, foi: 3 } },
+    refuser: { text: "Les anciens sont vexés d'être ignorés (-5 moral).", kind: "danger", effets: { moral: -5 } },
+  },
+];
 
 const VILLAGE_DECISIONS: ((s: GameState) => GameEvent | null)[] = [
   (s) => {
@@ -301,6 +365,10 @@ export function step(s: GameState): GameEvent[] {
     s.resources.or + Math.round(countDone(s, "marché") * (1 + Math.floor(s.population / 20)) * marketBonus)
   );
   s.resources.foi = Math.min(100, s.resources.foi + countDone(s, "église") * 0.5);
+  s.resources.or = Math.min(
+    999,
+    s.resources.or + countDone(s, "auberge") * (2 + Math.floor(s.moral / 30))
+  );
 
   const scienceGain =
     countDone(s, "scriptorium") * 1 +
@@ -315,6 +383,22 @@ export function step(s: GameState): GameEvent[] {
   if (Math.random() < 0.08) {
     const decision = pick(VILLAGE_DECISIONS)(s);
     if (decision) events.push(decision);
+  }
+
+  if (!s.demandeConseil && Math.random() < 0.1) {
+    const ref = Math.floor(Math.random() * DEMANDES_CONSEIL.length);
+    s.demandeConseil = {
+      id: s.nextEventId++,
+      year: y,
+      texte: DEMANDES_CONSEIL[ref].texte,
+      ref,
+    };
+    events.push({
+      id: s.nextEventId++,
+      year: y,
+      kind: "info",
+      text: `🙇 Le conseil des anciens sollicite le seigneur : ${s.demandeConseil.texte}.`,
+    });
   }
 
   const cap = housingCap(s);

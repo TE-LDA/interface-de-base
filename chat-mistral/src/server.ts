@@ -83,6 +83,7 @@ app.post("/api/order", async (req, res) => {
     '{ "reponse": "narration en français, 2 à 4 phrases, style chronique médiévale, en t\'adressant au seigneur",',
     '  "action": { "type": "build" | "ressources" | "decret" | "rien",',
     '    "batiment": "clé exacte d\'un élément de batiments_disponibles (seulement si le seigneur ordonne une construction)",',
+    '    "quantite": n (nombre d\'exemplaires si le seigneur en demande plusieurs, ex. "5 maisons" → quantite 5, entre 1 et 12),',
     '    "devis": { "bois": n, "pierre": n, "or": n } (coûts réels de la construction, seulement si type=build),',
     '    "titre": "titre de la loi/ordre", "texte": "texte de la loi/ordre" (obligatoires si type=decret : loi, décret, fondation d\'ordre religieux ou militaire, charte, promotion d\'un homme),',
     '    "effets": { "nourriture": n, "bois": n, "pierre": n, "or": n, "foi": n, "science": n, "moral": n, "pop": n } (petits effets numériques) } }',
@@ -90,6 +91,7 @@ app.post("/api/order", async (req, res) => {
     "Quand le seigneur promulgue une loi, un décret, fonde un ordre ou promeut quelqu'un : les habitants RÉAGISSENT. Décris leur réaction dans reponse (acclamations du peuple, murmures de la noblesse, révolte si le moral est bas, bénédiction du clergé si la foi est haute...) et traduis-la en effets. Utilise type \"decret\" avec titre et texte.",
     "Si le seigneur demande seulement un devis, réponds type \"rien\" et décris le devis dans reponse.",
     "Si le seigneur s'adresse à ses hommes (ex. « améliore l'économie, que me proposez-vous ? »), fais répondre les hommes dans reponse et applique de petits effets cohérents, ou lance une construction abordable (type \"build\").",
+    "Le coût s'adapte à la quantité demandée (plusieurs exemplaires = tarif dégressif) : indique le coût TOTAL dans devis pour la quantite demandée.",
     "Ne jamais inventer de bâtiment hors de la liste batiments_disponibles. Reste concis.",
   ].join(" ");
 

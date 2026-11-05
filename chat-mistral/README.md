@@ -25,10 +25,11 @@ Avant le premier `npm run dev`, ouvrez `chat-mistral/.env` dans un éditeur et r
 ## Jouer
 
 - La partie tourne en boucle (1 tick = 1 mois, 12 ticks = 1 an) : **⏸/▶** pour pause, **vitesse ×1/×2/×4** pour accélérer.
+- **Ordres du seigneur** 🖋️ (open world, texte libre) : tapez ce que vous voulez — « construis une ferme », « donne-moi le devis de la bibliothèque », « va voir mes hommes : améliore l'économie, que me proposez-vous ? ». `mistral-small-latest` joue le maître du jeu : il répond dans la chronique et renvoie une action structurée (JSON). Pour une construction, l'**architecte dresse le devis** (📐 dans la chronique) comparé à vos ressources, et les travaux ne commencent que si le devis est abordable.
 - **Production** : les fermes 🌾 et moulins 🍞 produisent la nourriture, les 🪓 cabanes de bûcherons produisent le **bois**, les ⛏️ carrières produisent la **pierre**, les ateliers 🔨 transforment bois/pierre en or, les marchés ⚖️ rapportent de l'or selon la population.
-- **Village autonome** (bouton 🏘️) : le village se développe tout seul — chaque mois, les villageois construisent ce qui manque (nourriture, logements, ressources) s'ils en ont les moyens. En tant que **seigneur**, vous pouvez aussi cliquer sur une case herbeuse pour ordonner vous-même une construction.
-- **Demandes des villageois** 🙇 : par moments, le village vous sollicite (défricher la forêt, ériger une chapelle, donner un banquet, payer la dîme…) — répondez **Accorder** ou **Refuser**, avec des conséquences sur le moral, la foi et les ressources.
-- Les événements marquants (famine, peste, guerre, successions, uchronies) sont racontés dans la **Chronique** par `mistral-small-latest`.
+- **Science** 🔬 : scriptorium 📜, bibliothèque 📚 et université 🎓 produisent de la connaissance 📖, à dépenser dans l'arbre de **découvertes** (assollement, horlogerie, médecine, remparts, imprimerie…).
+- **Village autonome** (bouton 🏘️) : le village se développe tout seul — chaque mois, les villageois construisent ce qui manque (nourriture, logements, ressources) s'ils en ont les moyens. Vous pouvez aussi cliquer sur une case herbeuse pour construire à la main.
+- Les événements marquants (famine, peste, guerre, comètes, successions, uchronies) sont racontés dans la **Chronique** par `mistral-small-latest`.
 - La partie est sauvegardée dans `localStorage` : rechargez la page, le royaume continue là où il en était. **Nouvelle chronique** repart de zéro (nouvelle uchronie).
 
 ## Mode production

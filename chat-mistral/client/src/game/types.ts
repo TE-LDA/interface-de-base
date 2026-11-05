@@ -10,7 +10,12 @@ export type BuildingType =
   | "marché"
   | "tour"
   | "cabane"
-  | "carrière";
+  | "carrière"
+  | "scriptorium"
+  | "bibliothèque"
+  | "université";
+
+export type TechId = "assollement" | "horlogerie" | "medecine" | "remparts" | "imprimerie";
 
 export interface Building {
   type: BuildingType;
@@ -26,18 +31,34 @@ export interface Resources {
   pierre: number;
   or: number;
   foi: number;
+  science: number;
 }
 
-export type EventKind = "info" | "danger" | "joy" | "petition";
-
-export type PetitionType = "forest" | "chapel" | "feast" | "tithe";
+export type EventKind = "info" | "danger" | "joy";
 
 export interface GameEvent {
   id: number;
   year: number;
   kind: EventKind;
   text: string;
-  petition?: PetitionType;
+}
+
+export interface OrderDevis {
+  bois?: number;
+  pierre?: number;
+  or?: number;
+}
+
+export interface OrderAction {
+  type: "build" | "ressources" | "rien";
+  batiment?: string;
+  devis?: OrderDevis;
+  effets?: Record<string, number>;
+}
+
+export interface OrderResponse {
+  reponse: string;
+  action?: OrderAction;
 }
 
 export interface GameState {
@@ -51,7 +72,7 @@ export interface GameState {
   moral: number;
   buildings: Building[];
   events: GameEvent[];
-  pendingPetition: GameEvent | null;
+  techs: TechId[];
   nextEventId: number;
   running: boolean;
   speed: number;

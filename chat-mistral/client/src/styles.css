@@ -213,6 +213,9 @@ button:disabled {
   flex-direction: column;
   gap: 0.9rem;
   min-height: 0;
+  overflow-y: auto;
+  max-height: calc(100vh - 190px);
+  padding-right: 2px;
 }
 
 .palette,
@@ -286,48 +289,86 @@ button:disabled {
   border: none;
 }
 
-.petition {
+.orders,
+.research {
   border-radius: 12px;
   padding: 0.8rem 1rem;
   background:
-    repeating-linear-gradient(0deg, rgba(120, 40, 20, 0.05) 0 2px, transparent 2px 4px),
-    linear-gradient(180deg, #fbe9d8, #f3d9bd);
-  border: 2px solid #8a3a2a;
-  outline: 1px solid rgba(212, 160, 23, 0.7);
+    repeating-linear-gradient(0deg, rgba(120, 90, 40, 0.05) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, var(--parchemin-clair), var(--parchemin));
+  border: 2px solid var(--bordure);
+  outline: 1px solid rgba(212, 160, 23, 0.6);
   outline-offset: -5px;
-  box-shadow: 0 4px 14px rgba(80, 30, 10, 0.35);
+  box-shadow: 0 4px 14px rgba(60, 40, 10, 0.3);
 }
 
-.petition h2 {
-  margin: 0 0 0.5rem;
+.orders h2,
+.research h2 {
+  margin: 0 0 0.6rem;
   font-size: 1.02rem;
   font-variant: small-caps;
   letter-spacing: 0.05em;
-  color: #8a3a2a;
-  border-bottom: 1px solid #8a3a2a;
+  color: #6b4f26;
+  border-bottom: 1px solid var(--bordure);
   padding-bottom: 0.35rem;
 }
 
-.petition p {
-  margin: 0 0 0.6rem;
+.orders {
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 40, 20, 0.05) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #fdf3e0, #f3e2c2);
+  border-color: #8a6a3a;
+}
+
+.orders input {
+  width: 100%;
+  font-family: inherit;
   font-size: 0.95rem;
   font-style: italic;
-  line-height: 1.4;
+  padding: 0.55rem 0.8rem;
+  border-radius: 9px;
+  border: 2px solid var(--bordure);
+  background: #fff8e6;
+  color: var(--encre);
+  margin-bottom: 0.5rem;
 }
 
-.petition-actions {
+.orders button {
+  width: 100%;
+  background: linear-gradient(180deg, #e0b23f, var(--or));
+  color: #33270f;
+  border-color: #241708;
+}
+
+.tech {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px dashed rgba(138, 106, 58, 0.5);
+  font-size: 0.9rem;
 }
 
-.petition-actions .accept {
-  background: linear-gradient(180deg, #7d9b4a, #5c7433);
-  border-color: #2c3d17;
+.tech:last-child {
+  border-bottom: none;
 }
 
-.petition-actions .refuse {
-  background: linear-gradient(180deg, #a04a35, #7c3524);
-  border-color: #3d150c;
+.tech small {
+  display: block;
+  color: #7a5a2e;
+  font-size: 0.78rem;
+}
+
+.tech em {
+  color: #5c7433;
+  font-size: 0.85rem;
+}
+
+.tech button {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {

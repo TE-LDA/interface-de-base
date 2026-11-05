@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { sendOrder } from "./api";
 import { narrate } from "./game/chronicle";
 import {
   BUILDING_CATALOG,
   GRID_H,
   GRID_W,
-  PETITION_TEXT,
+  TECHS,
   buildingAt,
   createGame,
   defense,
+  freeTiles,
   housingCap,
-  resolvePetition,
+  research,
   seasonOf,
   step,
 } from "./game/sim";
-import type { BuildingType, ChronicleEntry, GameState } from "./game/types";
+import type { BuildingType, ChronicleEntry, GameState, OrderAction, TechId } from "./game/types";
 
 const SAVE_KEY = "uchronie-royaume-save";
 const TICK_MS = 450;
@@ -28,19 +30,46 @@ function load(): GameState | null {
   }
 }
 
+function stateSummary(s: GameState) {
+  return {
+    royaume: s.kingdom,
+    maison: s.dynasty,
+    seigneur: s.ruler,
+    an: s.year,
+    saison: seasonOf(s.month),
+    ressources: s.resources,
+    population: s.population,
+    moral: Math.round(s.moral),
+    defense: defense(s),
+    batiments: s.buildings.map((b) =>
+      BUILDING_CATALOG[b.type].name + (b.done ? "" : " (en chantier)")
+    ),
+    decouvertes: s.techs.map((t) => TECHS[t].name),
+    village_autonome: s.autoDev,
+    batiments_disponibles: (
+      Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
+    )
+      .filter(([t]) => t !== "château")
+      .map(([t, c]) => `${t} (${c.name}, ${c.desc}) coût: ${JSON.stringify(c.cost)}`),
+  };
+}
+
 export default function App() {
   const narrated = useRef(new Set<number>());
   const [state, setState] = useState<GameState>(() => {
     const saved = load();
     if (saved) {
       if (typeof saved.autoDev !== "boolean") saved.autoDev = true;
-      if (!saved.pendingPetition) saved.pendingPetition = null;
+      saved.techs = saved.techs ?? [];
+      saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
     return saved ?? createGame();
   });
   const [chronicle, setChronicle] = useState<ChronicleEntry[]>([]);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  const [order, setOrder] = useState("");
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!state.running) return;
@@ -51,6 +80,7 @@ export default function App() {
           resources: { ...prev.resources },
           buildings: prev.buildings.map((b) => ({ ...b })),
           events: [...prev.events],
+          techs: [...prev.techs],
         };
         for (const e of step(next)) {
           next.events.push(e);
@@ -58,7 +88,7 @@ export default function App() {
           narrated.current.add(e.id);
           if (e.kind === "info") {
             setChronicle((c) => [...c, { year: e.year, text: e.text }]);
-          } else if (e.kind !== "petition") {
+          } else {
             void narrate(next, e).then((text) =>
               setChronicle((c) => [...c, { year: e.year, text }])
             );
@@ -78,6 +108,10 @@ export default function App() {
     }
   }, [state]);
 
+  function pushChronicle(year: number, text: string) {
+    setChronicle((c) => [...c, { year, text }]);
+  }
+
   function toggleRunning() {
     setState((s) => ({ ...s, running: !s.running }));
   }
@@ -88,30 +122,6 @@ export default function App() {
 
   function toggleAutoDev() {
     setState((s) => ({ ...s, autoDev: !s.autoDev }));
-  }
-
-  function answerPetition(accept: boolean) {
-    setState((s) => {
-      if (!s.pendingPetition) return s;
-      const next: GameState = {
-        ...s,
-        resources: { ...s.resources },
-        buildings: s.buildings.map((b) => ({ ...b })),
-        events: [...s.events],
-        pendingPetition: { ...s.pendingPetition },
-      };
-      const outcome = resolvePetition(next, accept);
-      if (outcome) {
-        next.events.push(outcome);
-        if (!narrated.current.has(outcome.id)) {
-          narrated.current.add(outcome.id);
-          void narrate(next, outcome).then((text) =>
-            setChronicle((c) => [...c, { year: outcome.year, text }])
-          );
-        }
-      }
-      return next;
-    });
   }
 
   function newGame() {
@@ -149,15 +159,126 @@ export default function App() {
     setSelected(null);
   }
 
+  function doResearch(id: TechId) {
+    setState((s) => {
+      const next: GameState = {
+        ...s,
+        resources: { ...s.resources },
+        buildings: s.buildings.map((b) => ({ ...b })),
+        events: [...s.events],
+        techs: [...s.techs],
+      };
+      const ev = research(next, id);
+      if (ev) {
+        next.events.push(ev);
+        if (!narrated.current.has(ev.id)) {
+          narrated.current.add(ev.id);
+          void narrate(next, ev).then((text) => pushChronicle(ev.year, text));
+        }
+      }
+      return next;
+    });
+  }
+
+  async function submitOrder(event: React.FormEvent) {
+    event.preventDefault();
+    const text = order.trim();
+    if (!text || sending) return;
+    setOrder("");
+    setSending(true);
+    try {
+      const res = await sendOrder(text, stateSummary(state));
+      if (res.reponse) pushChronicle(state.year, `🖋️ ${res.reponse}`);
+      applyAction(res.action);
+    } catch (err) {
+      pushChronicle(
+        state.year,
+        `⚠ Le héraut n'a pas pu porter l'ordre : ${err instanceof Error ? err.message : "erreur inconnue"}`
+      );
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function applyAction(action: OrderAction | undefined) {
+    if (!action) return;
+    if (action.type === "build" && action.batiment) {
+      const key = (Object.keys(BUILDING_CATALOG) as BuildingType[]).find(
+        (t) =>
+          t === action.batiment ||
+          BUILDING_CATALOG[t].name.toLowerCase() === action.batiment!.toLowerCase()
+      );
+      if (!key) return;
+      const cat = BUILDING_CATALOG[key];
+      const r = state.resources;
+      const cost = { bois: cat.cost.bois ?? 0, pierre: cat.cost.pierre ?? 0, or: cat.cost.or ?? 0 };
+      const missing = {
+        bois: Math.max(0, cost.bois - Math.floor(r.bois)),
+        pierre: Math.max(0, cost.pierre - Math.floor(r.pierre)),
+        or: Math.max(0, cost.or - Math.floor(r.or)),
+      };
+      const afford = missing.bois === 0 && missing.pierre === 0 && missing.or === 0;
+      pushChronicle(
+        state.year,
+        `📐 Devis de l'architecte — ${cat.emoji} ${cat.name} : 🪵${cost.bois} 🪨${cost.pierre} 💰${cost.or} | vos ressources : 🪵${Math.floor(r.bois)} 🪨${Math.floor(r.pierre)} 💰${Math.floor(r.or)} → ${
+          afford ? "✅ abordable, les travaux commencent" : `❌ insuffisant (il manque 🪵${missing.bois} 🪨${missing.pierre} 💰${missing.or})`
+        }.`
+      );
+      if (!afford) return;
+      setState((s) => {
+        const tiles = freeTiles(s);
+        if (tiles.length === 0) return s;
+        const t = tiles[Math.floor(Math.random() * tiles.length)];
+        const next: GameState = {
+          ...s,
+          resources: {
+            ...s.resources,
+            bois: s.resources.bois - cost.bois,
+            pierre: s.resources.pierre - cost.pierre,
+            or: s.resources.or - cost.or,
+          },
+          buildings: [...s.buildings, { type: key, x: t.x, y: t.y, progress: 0, done: false }],
+          events: [...s.events],
+        };
+        const ev = {
+          id: next.nextEventId++,
+          year: next.year,
+          kind: "joy" as const,
+          text: `Par ordre du seigneur, on bâtit : ${cat.name}.`,
+        };
+        next.events.push(ev);
+        if (!narrated.current.has(ev.id)) {
+          narrated.current.add(ev.id);
+          void narrate(next, ev).then((text) => pushChronicle(ev.year, text));
+        }
+        return next;
+      });
+    } else if (action.type === "ressources" && action.effets) {
+      const e = action.effets;
+      setState((s) => ({
+        ...s,
+        resources: {
+          ...s.resources,
+          nourriture: Math.max(0, Math.min(500, s.resources.nourriture + (e.nourriture ?? 0))),
+          bois: Math.max(0, Math.min(999, s.resources.bois + (e.bois ?? 0))),
+          pierre: Math.max(0, Math.min(999, s.resources.pierre + (e.pierre ?? 0))),
+          or: Math.max(0, Math.min(999, s.resources.or + (e.or ?? 0))),
+          foi: Math.max(0, Math.min(100, s.resources.foi + (e.foi ?? 0))),
+          science: Math.max(0, Math.min(999, s.resources.science + (e.science ?? 0))),
+        },
+        moral: Math.max(0, Math.min(100, s.moral + (e.moral ?? 0))),
+        population: Math.max(0, s.population + (e.pop ?? 0)),
+      }));
+    }
+  }
+
   const selectedBuilding = selected ? buildingAt(state, selected.x, selected.y) : undefined;
   const r = state.resources;
 
   return (
     <div className="app">
       <header className="topbar">
-        <h1>
-          🏰 Royaume de {state.kingdom}
-        </h1>
+        <h1>🏰 Royaume de {state.kingdom}</h1>
         <div className="subtitle">
           Maison {state.dynasty} — {state.ruler} — An {state.year} — {seasonOf(state.month)}
         </div>
@@ -184,6 +305,7 @@ export default function App() {
         <span className="chip">🪨 {Math.round(r.pierre)}</span>
         <span className="chip">💰 {Math.round(r.or)}</span>
         <span className="chip">⛪ {Math.round(r.foi)}</span>
+        <span className="chip">📖 {Math.round(r.science)}</span>
         <span className="chip">😊 {Math.round(state.moral)}</span>
         <span className="chip">🛡️ {defense(state)}</span>
       </div>
@@ -220,20 +342,44 @@ export default function App() {
         </section>
 
         <aside className="side">
-          {state.pendingPetition?.petition && (
-            <div className="petition">
-              <h2>🙇 Demande des villageois</h2>
-              <p>{PETITION_TEXT[state.pendingPetition.petition]}</p>
-              <div className="petition-actions">
-                <button type="button" className="accept" onClick={() => answerPetition(true)}>
-                  Accorder
-                </button>
-                <button type="button" className="refuse" onClick={() => answerPetition(false)}>
-                  Refuser
-                </button>
-              </div>
-            </div>
-          )}
+          <form className="orders" onSubmit={submitOrder}>
+            <h2>🖋️ Ordres du seigneur</h2>
+            <input
+              type="text"
+              value={order}
+              onChange={(e) => setOrder(e.target.value)}
+              placeholder="Ex. : « Construis une ferme » ou « Améliore l'économie, que me proposez-vous ? »"
+              disabled={sending}
+            />
+            <button type="submit" disabled={sending || !order.trim()}>
+              {sending ? "Le héraut part…" : "Envoyer l'ordre"}
+            </button>
+          </form>
+
+          <div className="research">
+            <h2>🔬 Sciences — 📖 {Math.round(r.science)}</h2>
+            {(Object.entries(TECHS) as [TechId, (typeof TECHS)[TechId]][])
+              .map(([id, t]) => ({ id, t, owned: state.techs.includes(id) }))
+              .map(({ id, t, owned }) => (
+                <div className="tech" key={id}>
+                  <span>
+                    {t.emoji} {t.name} <small>{t.desc}</small>
+                  </span>
+                  {owned ? (
+                    <em>acquise</em>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={r.science < t.cost}
+                      onClick={() => doResearch(id)}
+                    >
+                      Rechercher ({t.cost} 📖)
+                    </button>
+                  )}
+                </div>
+              ))}
+          </div>
+
           {selected && !selectedBuilding && (
             <div className="palette">
               <h2>Construire en ({selected.x + 1}, {selected.y + 1})</h2>
@@ -266,6 +412,7 @@ export default function App() {
                 })}
             </div>
           )}
+
           <div className="chronicle">
             <h2>📜 Chronique</h2>
             {chronicle.length === 0 && <p className="empty">Les siècles s'écoulent…</p>}

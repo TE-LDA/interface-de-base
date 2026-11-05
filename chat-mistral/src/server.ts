@@ -64,6 +64,74 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+app.post("/api/order", async (req, res) => {
+  const order = req.body?.order;
+  if (typeof order !== "string" || order.trim().length === 0 || order.length > 500) {
+    return res
+      .status(400)
+      .json({ error: "Corps attendu : { \"order\": \"...\", \"state\": {...} }" });
+  }
+  const stateSummary =
+    req.body?.state && typeof req.body.state === "object"
+      ? JSON.stringify(req.body.state).slice(0, 4000)
+      : "{}";
+  const system = [
+    "Tu es le maître du jeu d'un royaume médiéval uchronique (jeu de gestion).",
+    "Le joueur est le seigneur et te donne des ordres en texte libre.",
+    `État actuel du royaume (JSON) : ${stateSummary}`,
+    "Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, de la forme :",
+    '{ "reponse": "narration en français, 2 à 4 phrases, style chronique médiévale, en t\'adressant au seigneur",',
+    '  "action": { "type": "build" | "ressources" | "rien",',
+    '    "batiment": "clé exacte d\'un élément de batiments_disponibles (seulement si le seigneur ordonne une construction)",',
+    '    "devis": { "bois": n, "pierre": n, "or": n } (coûts réels de la construction, seulement si type=build),',
+    '    "effets": { "nourriture": n, "bois": n, "pierre": n, "or": n, "foi": n, "science": n, "moral": n, "pop": n } (petits effets numériques si le seigneur accorde quelque chose) } }',
+    "Si le seigneur demande seulement un devis, réponds type \"rien\" et décris le devis dans reponse.",
+    "Si le seigneur s'adresse à ses hommes (ex. « améliore l'économie, que me proposez-vous ? »), fais répondre les hommes dans reponse et applique de petits effets cohérents, ou lance une construction abordable (type \"build\").",
+    "Ne jamais inventer de bâtiment hors de la liste batiments_disponibles. Reste concis.",
+  ].join(" ");
+
+  try {
+    const completion = await client.chat.complete({
+      model: MODEL,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: order.trim() },
+      ],
+      maxTokens: 400,
+      responseFormat: { type: "json_object" },
+    });
+    const content = completion.choices?.[0]?.message?.content;
+    const raw = typeof content === "string" ? content : "";
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          parsed = JSON.parse(m[0]);
+        } catch {
+          parsed = null;
+        }
+      }
+    }
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof (parsed as Record<string, unknown>).reponse !== "string"
+    ) {
+      return res.json({
+        reponse: raw.slice(0, 500) || "Le héraut revient bredouille : l'ordre n'a pas été compris.",
+        action: { type: "rien" },
+      });
+    }
+    res.json(parsed);
+  } catch (err) {
+    console.error("Erreur API Mistral (order):", err);
+    res.status(502).json({ error: "Échec de l'appel à l'API Mistral." });
+  }
+});
+
 const clientDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "dist-client");
 app.use(express.static(clientDir));
 app.get("/", (_req, res) => res.sendFile(path.join(clientDir, "index.html")));

@@ -5,9 +5,9 @@ import type {
   EventKind,
   GameEvent,
   GameState,
-  PetitionType,
   Resources,
   Season,
+  TechId,
 } from "./types";
 
 export const GRID_W = 8;
@@ -27,6 +27,17 @@ export const BUILDING_CATALOG: Record<
   tour: { emoji: "🗼", name: "Tour de guet", cost: { pierre: 35 }, buildMonths: 8, desc: "Protège des pillards" },
   cabane: { emoji: "🪓", name: "Cabane de bûcherons", cost: { pierre: 10, or: 5 }, buildMonths: 4, desc: "+3 bois par mois" },
   carrière: { emoji: "⛏️", name: "Carrière", cost: { bois: 15, or: 10 }, buildMonths: 8, desc: "+2 pierre par mois" },
+  scriptorium: { emoji: "📜", name: "Scriptorium", cost: { bois: 20, pierre: 25, or: 10 }, buildMonths: 8, desc: "+1 📖 par mois" },
+  bibliothèque: { emoji: "📚", name: "Bibliothèque", cost: { bois: 30, pierre: 35, or: 25 }, buildMonths: 12, desc: "+2 📖 par mois" },
+  université: { emoji: "🎓", name: "Université", cost: { bois: 30, pierre: 50, or: 40 }, buildMonths: 16, desc: "+4 📖 par mois" },
+};
+
+export const TECHS: Record<TechId, { emoji: string; name: string; cost: number; desc: string }> = {
+  assollement: { emoji: "🌾", name: "Assollement triennal", cost: 20, desc: "Les fermes produisent +50% de nourriture" },
+  horlogerie: { emoji: "⏳", name: "Horlogerie", cost: 25, desc: "Les marchés rapportent +50% d'or" },
+  medecine: { emoji: "⚕️", name: "Médecine des quatre humeurs", cost: 30, desc: "La peste fait moitié moins de victimes" },
+  remparts: { emoji: "🧱", name: "Remparts de pierre", cost: 40, desc: "Défense +4 contre les pillards" },
+  imprimerie: { emoji: "🖨️", name: "Imprimerie", cost: 60, desc: "+2 📖 par mois : le savoir se répand (uchronie !)" },
 };
 
 const SEASONS: Season[] = ["Printemps", "Été", "Automne", "Hiver"];
@@ -45,7 +56,11 @@ export function housingCap(s: GameState): number {
 }
 
 export function defense(s: GameState): number {
-  return (countDone(s, "château") > 0 ? 2 : 0) + countDone(s, "tour");
+  return (
+    (countDone(s, "château") > 0 ? 2 : 0) +
+    countDone(s, "tour") +
+    (s.techs?.includes("remparts") ? 4 : 0)
+  );
 }
 
 export function createGame(): GameState {
@@ -58,11 +73,10 @@ export function createGame(): GameState {
     ruler,
     year: 1187,
     month: 0,
-    resources: { nourriture: 60, bois: 40, pierre: 30, or: 20, foi: 50 },
+    resources: { nourriture: 60, bois: 40, pierre: 30, or: 20, foi: 50, science: 30 },
     population: 24,
     moral: 70,
     buildings: [{ type: "château", x: 4, y: 3, progress: 1, done: true }],
-    pendingPetition: null,
     events: [
       {
         id: 0,
@@ -71,10 +85,65 @@ export function createGame(): GameState {
         text: `Fondation du royaume de ${kingdom} par ${ruler}, de la maison ${dynasty}.`,
       },
     ],
+    techs: [],
     nextEventId: 1,
     running: true,
     speed: 1,
     autoDev: true,
+  };
+}
+
+export function research(s: GameState, id: TechId): GameEvent | null {
+  if (s.techs.includes(id)) return null;
+  const t = TECHS[id];
+  if (s.resources.science < t.cost) return null;
+  s.resources.science -= t.cost;
+  s.techs.push(id);
+  return {
+    id: s.nextEventId++,
+    year: s.year,
+    kind: "joy",
+    text: `Découverte : ${t.name}. ${t.desc}.`,
+  };
+}
+
+export function freeTiles(s: GameState): { x: number; y: number }[] {
+  const tiles: { x: number; y: number }[] = [];
+  for (let y = 0; y < GRID_H; y++) {
+    for (let x = 0; x < GRID_W; x++) {
+      if (!buildingAt(s, x, y)) tiles.push({ x, y });
+    }
+  }
+  return tiles;
+}
+
+function autoDevelop(s: GameState): GameEvent | null {
+  if (!s.autoDev || Math.random() > 0.3) return null;
+  const needFood = s.resources.nourriture < s.population;
+  const nearCap = s.population >= housingCap(s) - 2;
+  const candidates: BuildingType[] = needFood
+    ? ["ferme", "moulin", "ferme"]
+    : nearCap
+      ? ["maison", "maison"]
+      : ["ferme", "maison", "cabane", "carrière", "marché", "tour", "atelier", "église", "moulin", "scriptorium"];
+  const type = pick(candidates);
+  const cat = BUILDING_CATALOG[type];
+  const r = s.resources;
+  if (r.bois < (cat.cost.bois ?? 0) || r.pierre < (cat.cost.pierre ?? 0) || r.or < (cat.cost.or ?? 0)) {
+    return null;
+  }
+  const tiles = freeTiles(s);
+  if (tiles.length === 0) return null;
+  const t = pick(tiles);
+  r.bois -= cat.cost.bois ?? 0;
+  r.pierre -= cat.cost.pierre ?? 0;
+  r.or -= cat.cost.or ?? 0;
+  s.buildings.push({ type, x: t.x, y: t.y, progress: 0, done: false });
+  return {
+    id: s.nextEventId++,
+    year: s.year,
+    kind: "info",
+    text: `Les villageois élèvent : ${cat.name.toLowerCase()}.`,
   };
 }
 
@@ -99,10 +168,11 @@ function randomEvent(s: GameState): GameEvent | null {
     return mk("joy", text);
   }
   if (roll < 0.02) {
-    const loss = Math.min(s.population, 5 + Math.floor(Math.random() * 10));
+    const mult = s.techs.includes("medecine") ? 0.5 : 1;
+    const loss = Math.max(1, Math.round(Math.min(s.population, 5 + Math.floor(Math.random() * 10)) * mult));
     s.population -= loss;
     s.moral = Math.max(0, s.moral - 10);
-    return mk("danger", `La peste fauche ${loss} âmes dans les chaumières.`);
+    return mk("danger", `La peste fauche ${loss} âmes dans les chaumières${mult < 1 ? " (la médecine en a limité les ravages)" : ""}.`);
   }
   if (roll < 0.032) {
     const atk = 10 + Math.floor(Math.random() * 20);
@@ -137,136 +207,26 @@ function randomEvent(s: GameState): GameEvent | null {
     }
     return null;
   }
+  const winter = seasonOf(s.month) === "Hiver";
+  if (roll < 0.072 && winter) {
+    s.resources.nourriture = Math.max(0, s.resources.nourriture - 20);
+    return mk("danger", `Une gelée tardive anéantit les bourgeons : -20 nourriture.`);
+  }
+  if (roll < 0.078) {
+    const loss = Math.min(s.population, 2);
+    s.population -= loss;
+    return mk("danger", `Des loups rôdent la nuit dans les enclos : -${loss} âmes.`);
+  }
+  if (roll < 0.084) {
+    s.moral = Math.min(100, s.moral + 5);
+    return mk("joy", `Un jongleur divertit la place du marché : +5 moral.`);
+  }
+  if (roll < 0.09) {
+    s.resources.foi = Math.max(0, s.resources.foi - 8);
+    s.moral = Math.max(0, s.moral - 4);
+    return mk("danger", `Une comète embrase le ciel nocturne : les prêtres annoncent des temps troublés (-8 foi).`);
+  }
   return null;
-}
-
-function freeTiles(s: GameState): { x: number; y: number }[] {
-  const tiles: { x: number; y: number }[] = [];
-  for (let y = 0; y < GRID_H; y++) {
-    for (let x = 0; x < GRID_W; x++) {
-      if (!buildingAt(s, x, y)) tiles.push({ x, y });
-    }
-  }
-  return tiles;
-}
-
-function autoDevelop(s: GameState): GameEvent | null {
-  if (!s.autoDev || Math.random() > 0.3) return null;
-  const needFood = s.resources.nourriture < s.population;
-  const nearCap = s.population >= housingCap(s) - 2;
-  const candidates: BuildingType[] = needFood
-    ? ["ferme", "moulin", "ferme"]
-    : nearCap
-      ? ["maison", "maison"]
-      : ["ferme", "maison", "cabane", "carrière", "marché", "tour", "atelier", "église", "moulin"];
-  const type = pick(candidates);
-  const cat = BUILDING_CATALOG[type];
-  const r = s.resources;
-  if (r.bois < (cat.cost.bois ?? 0) || r.pierre < (cat.cost.pierre ?? 0) || r.or < (cat.cost.or ?? 0)) {
-    return null;
-  }
-  const tiles = freeTiles(s);
-  if (tiles.length === 0) return null;
-  const t = pick(tiles);
-  r.bois -= cat.cost.bois ?? 0;
-  r.pierre -= cat.cost.pierre ?? 0;
-  r.or -= cat.cost.or ?? 0;
-  s.buildings.push({ type, x: t.x, y: t.y, progress: 0, done: false });
-  return {
-    id: s.nextEventId++,
-    year: s.year,
-    kind: "info",
-    text: `Les villageois élèvent : ${cat.name.toLowerCase()}.`,
-  };
-}
-
-export const PETITION_TEXT: Record<PetitionType, string> = {
-  forest: "Les villageois demandent l'autorisation de défricher la forêt de chênes pour agrandir les champs.",
-  chapel: "Les anciens réclament la permission d'ériger une chapelle au bout du village (10 deniers).",
-  feast: "Le conseil des anciens sollicite un banquet pour célébrer la saison (15 de nourriture).",
-  tithe: "Le curé réclame la dîme du moulin au nom de l'Église (8 deniers).",
-};
-
-const PETITION_OUTCOMES: Record<
-  PetitionType,
-  { accept: (s: GameState) => string; refuse: (s: GameState) => string }
-> = {
-  forest: {
-    accept: (s) => {
-      s.resources.bois = Math.min(999, s.resources.bois + 12);
-      s.moral = Math.min(100, s.moral + 4);
-      return "La forêt est défrichée : +12 bois. Le peuple acclame son seigneur.";
-    },
-    refuse: (s) => {
-      s.moral = Math.max(0, s.moral - 5);
-      return "Le seigneur interdit le défrichement ; un murmure parcourt le village.";
-    },
-  },
-  chapel: {
-    accept: (s) => {
-      s.resources.or = Math.max(0, s.resources.or - 10);
-      s.resources.foi = Math.min(100, s.resources.foi + 15);
-      s.moral = Math.min(100, s.moral + 3);
-      return "La chapelle est érigée et bénie : la foi grandit (+15).";
-    },
-    refuse: (s) => {
-      s.resources.foi = Math.max(0, s.resources.foi - 8);
-      s.moral = Math.max(0, s.moral - 3);
-      return "Le seigneur refuse la chapelle ; les anciens baissent la tête.";
-    },
-  },
-  feast: {
-    accept: (s) => {
-      s.resources.nourriture = Math.max(0, s.resources.nourriture - 15);
-      s.moral = Math.min(100, s.moral + 10);
-      return "Le banquet est donné : le moral du peuple grimpe (+10).";
-    },
-    refuse: (s) => {
-      s.moral = Math.max(0, s.moral - 6);
-      return "Pas de banquet cette année. Les villageois se couchent de mauvaise humeur.";
-    },
-  },
-  tithe: {
-    accept: (s) => {
-      s.resources.or = Math.max(0, s.resources.or - 8);
-      s.resources.foi = Math.min(100, s.resources.foi + 10);
-      return "La dîme est versée : l'Église prie pour le seigneur (+10 foi).";
-    },
-    refuse: (s) => {
-      s.resources.foi = Math.max(0, s.resources.foi - 10);
-      s.moral = Math.max(0, s.moral - 4);
-      return "Le seigneur refuse la dîme ; le curé fulmine du haut de sa chaire.";
-    },
-  },
-};
-
-export function makePetition(s: GameState): GameEvent | null {
-  if (s.pendingPetition || Math.random() > 0.12) return null;
-  const type = pick(["forest", "chapel", "feast", "tithe"] as PetitionType[]);
-  const ev: GameEvent = {
-    id: s.nextEventId++,
-    year: s.year,
-    kind: "petition",
-    text: PETITION_TEXT[type],
-    petition: type,
-  };
-  s.pendingPetition = ev;
-  return ev;
-}
-
-export function resolvePetition(s: GameState, accept: boolean): GameEvent | null {
-  const p = s.pendingPetition;
-  if (!p || !p.petition) return null;
-  s.pendingPetition = null;
-  const outcome = accept
-    ? PETITION_OUTCOMES[p.petition].accept(s)
-    : PETITION_OUTCOMES[p.petition].refuse(s);
-  return {
-    id: s.nextEventId++,
-    year: s.year,
-    kind: accept ? "joy" : "danger",
-    text: outcome,
-  };
 }
 
 export function step(s: GameState): GameEvent[] {
@@ -289,8 +249,10 @@ export function step(s: GameState): GameEvent[] {
     }
   }
 
-  const foodFactor = SEASON_FOOD[Math.floor(s.month / 3)];
-  const production = Math.round((countDone(s, "ferme") * 6 + countDone(s, "moulin") * 5) * foodFactor);
+  const seasonIdx = Math.floor(s.month / 3);
+  const foodFactor = SEASON_FOOD[seasonIdx];
+  const farmBonus = s.techs.includes("assollement") ? 1.5 : 1;
+  const production = Math.round((countDone(s, "ferme") * 6 + countDone(s, "moulin") * 5) * foodFactor * farmBonus);
   const consumption = Math.round(s.population * 0.5);
   s.resources.nourriture += production - consumption;
 
@@ -298,20 +260,28 @@ export function step(s: GameState): GameEvent[] {
   s.resources.bois += Math.round(countDone(s, "cabane") * 3 * woodFactor);
   s.resources.pierre += countDone(s, "carrière") * 2;
 
-  const auto = autoDevelop(s);
-  if (auto) events.push(auto);
-
-  const petition = makePetition(s);
-  if (petition) events.push(petition);
-
+  const marketBonus = s.techs.includes("horlogerie") ? 1.5 : 1;
   const ateliers = countDone(s, "atelier");
   if (ateliers > 0 && s.resources.bois >= 2 && s.resources.pierre >= 1) {
     s.resources.bois -= 2;
     s.resources.pierre -= 1;
     s.resources.or = Math.min(999, s.resources.or + 4 * ateliers);
   }
-  s.resources.or = Math.min(999, s.resources.or + countDone(s, "marché") * (1 + Math.floor(s.population / 20)));
+  s.resources.or = Math.min(
+    999,
+    s.resources.or + Math.round(countDone(s, "marché") * (1 + Math.floor(s.population / 20)) * marketBonus)
+  );
   s.resources.foi = Math.min(100, s.resources.foi + countDone(s, "église") * 0.5);
+
+  const scienceGain =
+    countDone(s, "scriptorium") * 1 +
+    countDone(s, "bibliothèque") * 2 +
+    countDone(s, "université") * 4 +
+    (s.techs.includes("imprimerie") ? 2 : 0);
+  s.resources.science = Math.min(999, s.resources.science + scienceGain);
+
+  const auto = autoDevelop(s);
+  if (auto) events.push(auto);
 
   const cap = housingCap(s);
   if (s.resources.nourriture < 0) {
@@ -331,7 +301,7 @@ export function step(s: GameState): GameEvent[] {
   }
   s.moral = Math.max(0, s.moral - 0.2);
 
-  if (Math.random() < 0.06) {
+  if (Math.random() < 0.09) {
     const ev = randomEvent(s);
     if (ev) events.push(ev);
   }
@@ -344,7 +314,7 @@ export function step(s: GameState): GameEvent[] {
       id: s.nextEventId++,
       year: s.year,
       kind: "info",
-      text: `Bilan de l'an ${s.year} : population ${s.population}, moral ${Math.round(s.moral)}, trésor ${s.resources.or} deniers.`,
+      text: `Bilan de l'an ${s.year} : population ${s.population}, moral ${Math.round(s.moral)}, trésor ${s.resources.or} deniers, savoir ${Math.round(s.resources.science)} 📖.`,
     });
   }
 

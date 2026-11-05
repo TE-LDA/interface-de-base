@@ -66,7 +66,7 @@ export interface Decret {
 }
 
 export interface OrderAction {
-  type: "build" | "ressources" | "decret" | "invest" | "rien";
+  type: "build" | "ressources" | "decret" | "invest" | "mesure" | "rien";
   batiment?: string;
   quantite?: number;
   devis?: OrderDevis;
@@ -74,6 +74,7 @@ export interface OrderAction {
   texte?: string;
   projet?: string;
   montant?: number;
+  mesure?: string;
   effets?: Record<string, number>;
 }
 
@@ -84,7 +85,19 @@ export interface Project {
   nom: string;
   emoji: string;
   montant: number;
+  niveau: number;
+  actif: boolean;
   moisRestants: number;
+  yield: number;
+  upkeep: number;
+}
+
+export interface Buff {
+  id: number;
+  nom: string;
+  moisRestants: number;
+  defense?: number;
+  chantierX2?: boolean;
 }
 
 export interface DemandeConseil {
@@ -118,6 +131,8 @@ export interface GameState {
   totalInvesti: number;
   investiParCat: Record<string, number>;
   orDebutAnnee: number;
+  mesures: string[];
+  buffs: Buff[];
   techs: TechId[];
   nextEventId: number;
   running: boolean;

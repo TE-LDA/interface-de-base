@@ -8,8 +8,10 @@ import {
   STRATEGIES,
   TECHS,
   ADVISOR_THRESHOLD,
+  DECISIONS,
   PROJECT_CATS,
   advisorStrategy,
+  applyDecision,
   buildingAt,
   createGame,
   defense,
@@ -19,8 +21,8 @@ import {
   freeTiles,
   housingCap,
   invest,
+  matchDecision,
   matchProjectCat,
-  projectGain,
   quote,
   research,
   seasonOf,
@@ -79,6 +81,9 @@ function stateSummary(s: GameState) {
     budget_or: Math.floor(s.resources.or),
     projets_actifs: s.projects.map((p) => `${p.emoji} ${p.nom}: ${p.montant} or, encore ${p.moisRestants} mois`),
     categories_projets: Object.values(PROJECT_CATS).map((c) => `${c.name} (${c.desc})`),
+    decisions_disponibles: Object.entries(DECISIONS).map(([id, d]) => `${id} = ${d.name} : ${d.desc}`),
+    mesures_actives: s.mesures.map((m) => DECISIONS[m]?.name ?? m),
+    buffs_actifs: s.buffs.map((b) => `${b.nom} (${b.moisRestants} mois)`),
     village_autonome: s.autoDev,
     batiments_disponibles: (
       Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
@@ -102,6 +107,8 @@ export default function App() {
       if (typeof saved.totalInvesti !== "number") saved.totalInvesti = 0;
       saved.investiParCat = saved.investiParCat ?? {};
       if (typeof saved.orDebutAnnee !== "number") saved.orDebutAnnee = Math.round(saved.resources.or);
+      saved.mesures = saved.mesures ?? [];
+      saved.buffs = saved.buffs ?? [];
       saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
@@ -422,6 +429,28 @@ export default function App() {
         }
         return next;
       });
+    } else if (action.type === "mesure") {
+      const id = matchDecision(action.mesure ?? "");
+      if (!id || !DECISIONS[id]) return;
+      setState((s) => {
+        const next: GameState = {
+          ...s,
+          resources: { ...s.resources },
+          buildings: s.buildings.map((b) => ({ ...b })),
+          events: [...s.events],
+          mesures: [...s.mesures],
+          buffs: [...s.buffs],
+        };
+        const ev = applyDecision(next, id);
+        if (!ev) return s;
+        next.events.push(ev);
+        if (!narrated.current.has(ev.id)) {
+          narrated.current.add(ev.id);
+          if (ev.kind === "info") pushChronicle(ev.year, ev.text);
+          else void narrate(next, ev).then((t) => pushChronicle(ev.year, t));
+        }
+        return next;
+      });
     } else if (action.type === "decret") {
       setState((s) => {
         const next: GameState = {
@@ -548,7 +577,8 @@ export default function App() {
               <ul className="budget-projects">
                 {state.projects.map((p) => (
                   <li key={p.id}>
-                    {p.emoji} {p.nom} — {p.montant} 💰 → ~{projectGain(p.montant)}/mois ({p.moisRestants} mois restants)
+                    {p.emoji} {p.nom} N{p.niveau} — {p.montant} 💰 →{" "}
+                    {p.actif ? `+${p.yield}/mois permanent` : `chantier (${p.moisRestants} mois restants)`}
                   </li>
                 ))}
               </ul>
@@ -696,6 +726,21 @@ export default function App() {
                 </div>
               </div>
             )}
+            {(state.mesures.length > 0 || state.buffs.length > 0) && (
+              <div className="decrets">
+                <h3>⚖️ Mesures en vigueur</h3>
+                {state.mesures.map((m) => (
+                  <p key={m}>
+                    {DECISIONS[m]?.emoji} {DECISIONS[m]?.name ?? m}
+                  </p>
+                ))}
+                {state.buffs.map((b) => (
+                  <p key={b.id}>
+                    ⏳ {b.nom} — encore {b.moisRestants} mois
+                  </p>
+                ))}
+              </div>
+            )}
             {state.decrets.length > 0 && (
               <div className="decrets">
                 <h3>📜 Lois et ordres du royaume</h3>
@@ -715,7 +760,7 @@ export default function App() {
                 {state.projects.map((p) => (
                   <div className="tech" key={p.id}>
                     <span>
-                      {p.emoji} {p.nom} <small>{p.montant} 💰 investis (an {p.year}) — ~{projectGain(p.montant)}/mois — encore {p.moisRestants} mois</small>
+                      {p.emoji} {p.nom} N{p.niveau} <small>{p.montant} 💰 investis (an {p.year}) — {p.actif ? `+${p.yield}/mois permanent, entretien ${p.upkeep} or/mois` : `chantier : encore ${p.moisRestants} mois`}</small>
                     </span>
                   </div>
                 ))}

@@ -92,7 +92,8 @@ app.post("/api/order", async (req, res) => {
     "Si le seigneur demande seulement un devis, réponds type \"rien\" et décris le devis dans reponse.",
     "Si le seigneur s'adresse à ses hommes (ex. « améliore l'économie, que me proposez-vous ? »), fais répondre les hommes dans reponse et applique de petits effets cohérents, ou lance une construction abordable (type \"build\").",
     "Le coût s'adapte à la quantité demandée (plusieurs exemplaires = tarif dégressif) : indique le coût TOTAL dans devis pour la quantite demandée.",
-    "Si demande_en_attente n'est pas null, le seigneur répond à la proposition du conseil : « accorde/oui » → petits effets positifs cohérents, « refuse/non » → petits effets négatifs ou rien, toute autre réponse → discute et applique de petits effets selon le sens.",
+    "Si demande_en_attente n'est pas null, le seigneur ARBITRE la lettre du conseil (son argumentation est dans demande_en_attente) : « accorde/oui » → petits effets positifs cohérents avec la lettre, « refuse/non » → petits effets négatifs ou rien, toute autre réponse → discute et applique de petits effets selon le sens.",
+    "Dans reponse, fais réagir le conseil à la décision du seigneur (remerciements, déception, contre-proposition…).",
     "La strategie du royaume (macro) oriente tes propositions : ne propose pas de mesures militaires si la stratégie est Foi ou Savoir, etc.",
     "Ne jamais inventer de bâtiment hors de la liste batiments_disponibles. Reste concis.",
   ].join(" ");
@@ -135,6 +136,65 @@ app.post("/api/order", async (req, res) => {
     res.json(parsed);
   } catch (err) {
     console.error("Erreur API Mistral (order):", err);
+    res.status(502).json({ error: "Échec de l'appel à l'API Mistral." });
+  }
+});
+
+app.post("/api/letter", async (req, res) => {
+  const sujet = req.body?.sujet;
+  if (typeof sujet !== "string" || sujet.trim().length === 0 || sujet.length > 300) {
+    return res.status(400).json({ error: "Corps attendu : { \"sujet\": \"...\", \"state\": {...} }" });
+  }
+  const stateSummary =
+    req.body?.state && typeof req.body.state === "object"
+      ? JSON.stringify(req.body.state).slice(0, 4000)
+      : "{}";
+  const system = [
+    "Tu es le secrétaire du conseil des anciens d'un royaume médiéval uchronique.",
+    `État du royaume (JSON) : ${stateSummary}`,
+    `Le conseil veut soumettre au seigneur la proposition suivante : "${sujet.trim()}"`,
+    "Rédige la LETTRE officielle que le conseil enverra au seigneur, AVEC l'argumentation complète pour arbitrer.",
+    'Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour : { "titre": "titre de la lettre", "corps": "3 à 6 phrases en français, style lettre officielle médiévale : salutation, exposé de la demande, arguments POUR, coûts et risques éventuels, formule de clôture." }',
+  ].join(" ");
+
+  try {
+    const completion = await client.chat.complete({
+      model: MODEL,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: `Rédige la lettre du conseil pour la proposition : ${sujet.trim()}` },
+      ],
+      maxTokens: 300,
+      responseFormat: { type: "json_object" },
+    });
+    const content = completion.choices?.[0]?.message?.content;
+    const raw = typeof content === "string" ? content : "";
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          parsed = JSON.parse(m[0]);
+        } catch {
+          parsed = null;
+        }
+      }
+    }
+    const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    res.json({
+      titre:
+        typeof obj.titre === "string" && obj.titre
+          ? obj.titre
+          : "Lettre du conseil des anciens",
+      corps:
+        typeof obj.corps === "string" && obj.corps
+          ? obj.corps
+          : `Le conseil des anciens soumet au seigneur la proposition suivante : ${sujet.trim()}.`,
+    });
+  } catch (err) {
+    console.error("Erreur API Mistral (letter):", err);
     res.status(502).json({ error: "Échec de l'appel à l'API Mistral." });
   }
 });

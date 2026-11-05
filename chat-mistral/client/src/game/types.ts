@@ -79,6 +79,8 @@ export interface DemandeConseil {
   id: number;
   year: number;
   texte: string;
+  titre?: string;
+  corps?: string;
 }
 
 export interface OrderResponse {

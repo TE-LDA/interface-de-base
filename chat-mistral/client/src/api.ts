@@ -18,6 +18,27 @@ export async function sendChat(messages: ChatMessage[], maxTokens?: number): Pro
   return data.reply;
 }
 
+export interface Lettre {
+  titre: string;
+  corps: string;
+}
+
+export async function sendLetter(sujet: string, state: unknown): Promise<Lettre> {
+  const res = await fetch("/api/letter", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sujet, state }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || "Erreur serveur");
+  }
+  return {
+    titre: typeof data.titre === "string" ? data.titre : "Lettre du conseil des anciens",
+    corps: typeof data.corps === "string" ? data.corps : sujet,
+  };
+}
+
 export async function sendOrder(order: string, state: unknown): Promise<OrderResponse> {
   const res = await fetch("/api/order", {
     method: "POST",

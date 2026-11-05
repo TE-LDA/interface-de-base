@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { sendOrder } from "./api";
+import { sendLetter, sendOrder } from "./api";
 import { narrate } from "./game/chronicle";
 import {
   BUILDING_CATALOG,
@@ -63,7 +63,9 @@ function stateSummary(s: GameState) {
     ),
     decouvertes: s.techs.map((t) => TECHS[t].name),
     lois_en_vigueur: s.decrets.map((d) => `${d.titre} (an ${d.year})`),
-    demande_en_attente: s.demandeConseil?.texte ?? null,
+    demande_en_attente: s.demandeConseil
+      ? `${s.demandeConseil.texte}${s.demandeConseil.titre ? ` — lettre « ${s.demandeConseil.titre} » : ${s.demandeConseil.corps}` : ""}`
+      : null,
     strategie: STRATEGIES.find((x) => x.id === s.strategy)?.name ?? "Équilibre",
     village_autonome: s.autoDev,
     batiments_disponibles: (
@@ -118,6 +120,22 @@ export default function App() {
               setChronicle((c) => [...c, { year: e.year, text }])
             );
           }
+        }
+        if (next.demandeConseil && !narrated.current.has(next.demandeConseil.id)) {
+          narrated.current.add(next.demandeConseil.id);
+          const demande = next.demandeConseil;
+          void sendLetter(demande.texte, stateSummary(next))
+            .then((l) => {
+              setState((s) =>
+                s.demandeConseil && s.demandeConseil.id === demande.id
+                  ? { ...s, demandeConseil: { ...s.demandeConseil, titre: l.titre, corps: l.corps } }
+                  : s
+              );
+              pushChronicle(demande.year, `✉️ Lettre du conseil des anciens — « ${l.titre} »`);
+            })
+            .catch(() => {
+              pushChronicle(demande.year, `✉️ Le conseil envoie sa demande : ${demande.texte}`);
+            });
         }
         return next;
       });
@@ -402,11 +420,19 @@ export default function App() {
         <aside className="panel">
           <form className="card orders" onSubmit={submitOrder}>
             <h2>🖋️ Vos ordres</h2>
-            {state.demandeConseil && (
-              <div className="demande-banner">
-                🙇 Le conseil des anciens attend votre réponse : « {state.demandeConseil.texte} » — répondez « accorde » ou « refuse ».
-              </div>
-            )}
+            {state.demandeConseil &&
+              (state.demandeConseil.corps ? (
+                <div className="lettre">
+                  <div className="lettre-head">✉️ Lettre du conseil des anciens <span className="seal">🔴</span></div>
+                  <h3>{state.demandeConseil.titre ?? "Proposition du conseil"}</h3>
+                  <p className="lettre-corps">{state.demandeConseil.corps}</p>
+                  <p className="lettre-hint">Arbitrez ci-dessous : « accorde », « refuse », ou « plutôt… »</p>
+                </div>
+              ) : (
+                <div className="demande-banner">
+                  🙇 Le conseil délibère et rédige sa lettre… (« {state.demandeConseil.texte} »)
+                </div>
+              ))}
             <input
               type="text"
               value={order}

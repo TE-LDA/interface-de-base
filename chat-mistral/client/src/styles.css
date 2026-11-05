@@ -223,6 +223,46 @@ button:disabled {
   margin-bottom: 0.55rem;
 }
 
+.lettre {
+  background: linear-gradient(180deg, #fffdf4, #f7eeda);
+  border: 1px solid var(--bordure);
+  border-left: 4px solid var(--or);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.6rem;
+  box-shadow: 0 2px 8px rgba(60, 40, 10, 0.2);
+}
+
+.lettre-head {
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  font-size: 0.85rem;
+  color: #6b4f26;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lettre h3 {
+  margin: 0.3rem 0 0.4rem;
+  font-size: 1rem;
+  font-style: italic;
+}
+
+.lettre-corps {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.lettre-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #7c3524;
+}
+
 .orders input {
   width: 100%;
   font-family: inherit;

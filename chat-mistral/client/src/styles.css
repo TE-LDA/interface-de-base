@@ -320,24 +320,42 @@ button:disabled {
   border-color: #8a6a3a;
 }
 
+.orders {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.orders h2 {
+  margin: 0;
+  border: none;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.order-row {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+}
+
 .orders input {
-  width: 100%;
+  flex: 1;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-style: italic;
   padding: 0.55rem 0.8rem;
   border-radius: 9px;
   border: 2px solid var(--bordure);
   background: #fff8e6;
   color: var(--encre);
-  margin-bottom: 0.5rem;
 }
 
 .orders button {
-  width: 100%;
   background: linear-gradient(180deg, #e0b23f, var(--or));
   color: #33270f;
   border-color: #241708;
+  white-space: nowrap;
 }
 
 .tech {

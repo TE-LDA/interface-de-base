@@ -342,20 +342,6 @@ export default function App() {
         </section>
 
         <aside className="side">
-          <form className="orders" onSubmit={submitOrder}>
-            <h2>🖋️ Ordres du seigneur</h2>
-            <input
-              type="text"
-              value={order}
-              onChange={(e) => setOrder(e.target.value)}
-              placeholder="Ex. : « Construis une ferme » ou « Améliore l'économie, que me proposez-vous ? »"
-              disabled={sending}
-            />
-            <button type="submit" disabled={sending || !order.trim()}>
-              {sending ? "Le héraut part…" : "Envoyer l'ordre"}
-            </button>
-          </form>
-
           <div className="research">
             <h2>🔬 Sciences — 📖 {Math.round(r.science)}</h2>
             {(Object.entries(TECHS) as [TechId, (typeof TECHS)[TechId]][])
@@ -424,6 +410,22 @@ export default function App() {
           </div>
         </aside>
       </main>
+
+      <form className="orders" onSubmit={submitOrder}>
+        <h2>🖋️ Ordres du seigneur</h2>
+        <div className="order-row">
+          <input
+            type="text"
+            value={order}
+            onChange={(e) => setOrder(e.target.value)}
+            placeholder="Ex. : « Construis une ferme » ou « Améliore l'économie, que me proposez-vous ? »"
+            disabled={sending}
+          />
+          <button type="submit" disabled={sending || !order.trim()}>
+            {sending ? "Le héraut part…" : "Envoyer l'ordre ➤"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

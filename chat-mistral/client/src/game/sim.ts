@@ -112,6 +112,7 @@ export function invest(s: GameState, cat: string, montant: number): GameEvent | 
   if (m < 1 || s.resources.or < 1) return null;
   const c = PROJECT_CATS[cat] ?? PROJECT_CATS.commerce;
   s.resources.or -= m;
+  s.totalInvesti += m;
   s.projects.push({
     id: s.nextEventId++,
     year: s.year,
@@ -183,6 +184,7 @@ export function createGame(): GameState {
     demandeConseil: null,
     strategy: "equilibre",
     projects: [],
+    totalInvesti: 0,
     events: [
       {
         id: 0,
@@ -506,6 +508,21 @@ export function step(s: GameState): GameEvent[] {
   s.resources.pierre = Math.min(999, Math.max(0, s.resources.pierre));
 
   return events;
+}
+
+export function estimateIncome(s: GameState): number {
+  const marketBonus =
+    (s.techs.includes("horlogerie") ? 1.5 : 1) * (s.strategy === "prospérité" ? 1.5 : 1);
+  const marches = s.buildings.filter((b) => b.done && b.type === "marché").length;
+  const auberges = s.buildings.filter((b) => b.done && b.type === "auberge").length;
+  const projets = s.projects
+    .filter((p) => p.cat === "commerce")
+    .reduce((acc, p) => acc + projectGain(p.montant), 0);
+  return (
+    Math.round(marches * (1 + Math.floor(s.population / 20)) * marketBonus) +
+    auberges * (2 + Math.floor(s.moral / 30)) +
+    projets
+  );
 }
 
 export function buildingAt(s: GameState, x: number, y: number): Building | undefined {

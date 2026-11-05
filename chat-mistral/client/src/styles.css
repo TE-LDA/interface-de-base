@@ -407,6 +407,48 @@ button:disabled {
   background: #ffeec4;
 }
 
+.budget-or {
+  font-size: 1.7rem;
+  font-weight: bold;
+  color: #6b4f26;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-or small {
+  font-size: 0.85rem;
+  font-weight: normal;
+  font-style: italic;
+  color: #7a5a2e;
+}
+
+.budget-income {
+  color: #5c7433;
+  font-size: 0.88rem;
+  margin-top: 0.15rem;
+}
+
+.budget-total {
+  color: #7a5a2e;
+  font-size: 0.82rem;
+  font-style: italic;
+  margin-top: 0.15rem;
+}
+
+.budget-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: #7a5a2e;
+  line-height: 1.4;
+}
+
+.budget-projects {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .strategy-hint {
   margin: -0.2rem 0 0.6rem;
   font-size: 0.82rem;

@@ -115,6 +115,7 @@ export interface GameState {
   demandeConseil: DemandeConseil | null;
   strategy: StrategyId;
   projects: Project[];
+  totalInvesti: number;
   techs: TechId[];
   nextEventId: number;
   running: boolean;

@@ -11,6 +11,7 @@ import {
   buildingAt,
   createGame,
   defense,
+  estimateIncome,
   freeTiles,
   housingCap,
   invest,
@@ -94,6 +95,7 @@ export default function App() {
       if (!saved.demandeConseil) saved.demandeConseil = null;
       if (!saved.strategy) saved.strategy = "equilibre";
       saved.projects = saved.projects ?? [];
+      if (typeof saved.totalInvesti !== "number") saved.totalInvesti = 0;
       saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
@@ -493,6 +495,28 @@ export default function App() {
               ))}
             </div>
           </form>
+
+          <div className="card budget-card">
+            <h2>💰 Trésorerie</h2>
+            <div className="budget-or">
+              {Math.round(r.or)} <small>pièces d'or</small>
+            </div>
+            <div className="budget-income">+ ~{estimateIncome(state)} or/mois (marchés, auberges, projets)</div>
+            <div className="budget-total">Investi depuis le début : {state.totalInvesti} 💰</div>
+            {state.projects.length === 0 ? (
+              <p className="budget-hint">
+                Aucun projet en cours — dites par ex. « investissons 20 pièces d'or dans le commerce ».
+              </p>
+            ) : (
+              <ul className="budget-projects">
+                {state.projects.map((p) => (
+                  <li key={p.id}>
+                    {p.emoji} {p.nom} — {p.montant} 💰 → ~{projectGain(p.montant)}/mois ({p.moisRestants} mois restants)
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="card strategy-card">
             <h2>🎯 Stratégie (macro)</h2>

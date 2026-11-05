@@ -25,7 +25,9 @@ Avant le premier `npm run dev`, ouvrez `chat-mistral/.env` dans un éditeur et r
 ## Jouer
 
 - La partie tourne en boucle (1 tick = 1 mois, 12 ticks = 1 an) : **⏸/▶** pour pause, **vitesse ×1/×2/×4** pour accélérer.
-- Cliquez sur une case herbeuse pour choisir un bâtiment à construire (coûts en bois/pierre/or).
+- **Production** : les fermes 🌾 et moulins 🍞 produisent la nourriture, les 🪓 cabanes de bûcherons produisent le **bois**, les ⛏️ carrières produisent la **pierre**, les ateliers 🔨 transforment bois/pierre en or, les marchés ⚖️ rapportent de l'or selon la population.
+- **Village autonome** (bouton 🏘️) : le village se développe tout seul — chaque mois, les villageois construisent ce qui manque (nourriture, logements, ressources) s'ils en ont les moyens. En tant que **seigneur**, vous pouvez aussi cliquer sur une case herbeuse pour ordonner vous-même une construction.
+- **Demandes des villageois** 🙇 : par moments, le village vous sollicite (défricher la forêt, ériger une chapelle, donner un banquet, payer la dîme…) — répondez **Accorder** ou **Refuser**, avec des conséquences sur le moral, la foi et les ressources.
 - Les événements marquants (famine, peste, guerre, successions, uchronies) sont racontés dans la **Chronique** par `mistral-small-latest`.
 - La partie est sauvegardée dans `localStorage` : rechargez la page, le royaume continue là où il en était. **Nouvelle chronique** repart de zéro (nouvelle uchronie).
 

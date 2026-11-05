@@ -8,7 +8,9 @@ export type BuildingType =
   | "église"
   | "atelier"
   | "marché"
-  | "tour";
+  | "tour"
+  | "cabane"
+  | "carrière";
 
 export interface Building {
   type: BuildingType;
@@ -26,13 +28,16 @@ export interface Resources {
   foi: number;
 }
 
-export type EventKind = "info" | "danger" | "joy";
+export type EventKind = "info" | "danger" | "joy" | "petition";
+
+export type PetitionType = "forest" | "chapel" | "feast" | "tithe";
 
 export interface GameEvent {
   id: number;
   year: number;
   kind: EventKind;
   text: string;
+  petition?: PetitionType;
 }
 
 export interface GameState {
@@ -46,9 +51,11 @@ export interface GameState {
   moral: number;
   buildings: Building[];
   events: GameEvent[];
+  pendingPetition: GameEvent | null;
   nextEventId: number;
   running: boolean;
   speed: number;
+  autoDev: boolean;
 }
 
 export interface ChronicleEntry {

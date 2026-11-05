@@ -4,10 +4,12 @@ import {
   BUILDING_CATALOG,
   GRID_H,
   GRID_W,
+  PETITION_TEXT,
   buildingAt,
   createGame,
   defense,
   housingCap,
+  resolvePetition,
   seasonOf,
   step,
 } from "./game/sim";
@@ -30,7 +32,11 @@ export default function App() {
   const narrated = useRef(new Set<number>());
   const [state, setState] = useState<GameState>(() => {
     const saved = load();
-    if (saved) saved.events.forEach((e) => narrated.current.add(e.id));
+    if (saved) {
+      if (typeof saved.autoDev !== "boolean") saved.autoDev = true;
+      if (!saved.pendingPetition) saved.pendingPetition = null;
+      saved.events.forEach((e) => narrated.current.add(e.id));
+    }
     return saved ?? createGame();
   });
   const [chronicle, setChronicle] = useState<ChronicleEntry[]>([]);
@@ -48,8 +54,11 @@ export default function App() {
         };
         for (const e of step(next)) {
           next.events.push(e);
-          if (e.kind !== "info" && !narrated.current.has(e.id)) {
-            narrated.current.add(e.id);
+          if (narrated.current.has(e.id)) continue;
+          narrated.current.add(e.id);
+          if (e.kind === "info") {
+            setChronicle((c) => [...c, { year: e.year, text: e.text }]);
+          } else if (e.kind !== "petition") {
             void narrate(next, e).then((text) =>
               setChronicle((c) => [...c, { year: e.year, text }])
             );
@@ -75,6 +84,34 @@ export default function App() {
 
   function cycleSpeed() {
     setState((s) => ({ ...s, speed: SPEEDS[(SPEEDS.indexOf(s.speed) + 1) % SPEEDS.length] }));
+  }
+
+  function toggleAutoDev() {
+    setState((s) => ({ ...s, autoDev: !s.autoDev }));
+  }
+
+  function answerPetition(accept: boolean) {
+    setState((s) => {
+      if (!s.pendingPetition) return s;
+      const next: GameState = {
+        ...s,
+        resources: { ...s.resources },
+        buildings: s.buildings.map((b) => ({ ...b })),
+        events: [...s.events],
+        pendingPetition: { ...s.pendingPetition },
+      };
+      const outcome = resolvePetition(next, accept);
+      if (outcome) {
+        next.events.push(outcome);
+        if (!narrated.current.has(outcome.id)) {
+          narrated.current.add(outcome.id);
+          void narrate(next, outcome).then((text) =>
+            setChronicle((c) => [...c, { year: outcome.year, text }])
+          );
+        }
+      }
+      return next;
+    });
   }
 
   function newGame() {
@@ -131,6 +168,9 @@ export default function App() {
           <button type="button" onClick={cycleSpeed}>
             Vitesse ×{state.speed}
           </button>
+          <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev}>
+            🏘️ Village autonome : {state.autoDev ? "oui" : "non"}
+          </button>
           <button type="button" onClick={newGame}>
             Nouvelle chronique
           </button>
@@ -180,6 +220,20 @@ export default function App() {
         </section>
 
         <aside className="side">
+          {state.pendingPetition?.petition && (
+            <div className="petition">
+              <h2>🙇 Demande des villageois</h2>
+              <p>{PETITION_TEXT[state.pendingPetition.petition]}</p>
+              <div className="petition-actions">
+                <button type="button" className="accept" onClick={() => answerPetition(true)}>
+                  Accorder
+                </button>
+                <button type="button" className="refuse" onClick={() => answerPetition(false)}>
+                  Refuser
+                </button>
+              </div>
+            </div>
+          )}
           {selected && !selectedBuilding && (
             <div className="palette">
               <h2>Construire en ({selected.x + 1}, {selected.y + 1})</h2>

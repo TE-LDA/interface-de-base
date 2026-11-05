@@ -45,6 +45,7 @@ function stateSummary(s: GameState) {
       BUILDING_CATALOG[b.type].name + (b.done ? "" : " (en chantier)")
     ),
     decouvertes: s.techs.map((t) => TECHS[t].name),
+    lois_en_vigueur: s.decrets.map((d) => `${d.titre} (an ${d.year})`),
     village_autonome: s.autoDev,
     batiments_disponibles: (
       Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
@@ -61,6 +62,7 @@ export default function App() {
     if (saved) {
       if (typeof saved.autoDev !== "boolean") saved.autoDev = true;
       saved.techs = saved.techs ?? [];
+      saved.decrets = saved.decrets ?? [];
       saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
@@ -201,6 +203,19 @@ export default function App() {
     }
   }
 
+  function applyEffets(s: GameState, e: Record<string, number> | undefined) {
+    if (!e) return;
+    const r = s.resources;
+    r.nourriture = Math.max(0, Math.min(500, r.nourriture + (e.nourriture ?? 0)));
+    r.bois = Math.max(0, Math.min(999, r.bois + (e.bois ?? 0)));
+    r.pierre = Math.max(0, Math.min(999, r.pierre + (e.pierre ?? 0)));
+    r.or = Math.max(0, Math.min(999, r.or + (e.or ?? 0)));
+    r.foi = Math.max(0, Math.min(100, r.foi + (e.foi ?? 0)));
+    r.science = Math.max(0, Math.min(999, r.science + (e.science ?? 0)));
+    s.moral = Math.max(0, Math.min(100, s.moral + (e.moral ?? 0)));
+    s.population = Math.max(0, s.population + (e.pop ?? 0));
+  }
+
   function applyAction(action: OrderAction | undefined) {
     if (!action) return;
     if (action.type === "build" && action.batiment) {
@@ -254,22 +269,30 @@ export default function App() {
         }
         return next;
       });
-    } else if (action.type === "ressources" && action.effets) {
-      const e = action.effets;
-      setState((s) => ({
-        ...s,
-        resources: {
-          ...s.resources,
-          nourriture: Math.max(0, Math.min(500, s.resources.nourriture + (e.nourriture ?? 0))),
-          bois: Math.max(0, Math.min(999, s.resources.bois + (e.bois ?? 0))),
-          pierre: Math.max(0, Math.min(999, s.resources.pierre + (e.pierre ?? 0))),
-          or: Math.max(0, Math.min(999, s.resources.or + (e.or ?? 0))),
-          foi: Math.max(0, Math.min(100, s.resources.foi + (e.foi ?? 0))),
-          science: Math.max(0, Math.min(999, s.resources.science + (e.science ?? 0))),
-        },
-        moral: Math.max(0, Math.min(100, s.moral + (e.moral ?? 0))),
-        population: Math.max(0, s.population + (e.pop ?? 0)),
-      }));
+    } else if (action.type === "decret") {
+      setState((s) => {
+        const next: GameState = {
+          ...s,
+          resources: { ...s.resources },
+          decrets: [...s.decrets],
+        };
+        if (action.titre) {
+          next.decrets.push({
+            id: next.nextEventId++,
+            year: next.year,
+            titre: action.titre.slice(0, 120),
+            texte: (action.texte ?? "").slice(0, 500),
+          });
+        }
+        applyEffets(next, action.effets);
+        return next;
+      });
+    } else if (action.type === "ressources") {
+      setState((s) => {
+        const next: GameState = { ...s, resources: { ...s.resources } };
+        applyEffets(next, action.effets);
+        return next;
+      });
     }
   }
 
@@ -412,6 +435,19 @@ export default function App() {
                       );
                     })}
                 </div>
+              </div>
+            )}
+            {state.decrets.length > 0 && (
+              <div className="decrets">
+                <h3>📜 Lois et ordres du royaume</h3>
+                {[...state.decrets].reverse().map((d) => (
+                  <p key={d.id}>
+                    <strong>
+                      An {d.year} — {d.titre}
+                    </strong>
+                    {d.texte ? ` : ${d.texte}` : ""}
+                  </p>
+                ))}
               </div>
             )}
             <div className="research">

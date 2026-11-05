@@ -49,10 +49,19 @@ export interface OrderDevis {
   or?: number;
 }
 
+export interface Decret {
+  id: number;
+  year: number;
+  titre: string;
+  texte: string;
+}
+
 export interface OrderAction {
-  type: "build" | "ressources" | "rien";
+  type: "build" | "ressources" | "decret" | "rien";
   batiment?: string;
   devis?: OrderDevis;
+  titre?: string;
+  texte?: string;
   effets?: Record<string, number>;
 }
 
@@ -72,6 +81,7 @@ export interface GameState {
   moral: number;
   buildings: Building[];
   events: GameEvent[];
+  decrets: Decret[];
   techs: TechId[];
   nextEventId: number;
   running: boolean;

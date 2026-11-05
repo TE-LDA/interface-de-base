@@ -77,6 +77,7 @@ export function createGame(): GameState {
     population: 24,
     moral: 70,
     buildings: [{ type: "château", x: 4, y: 3, progress: 1, done: true }],
+    decrets: [],
     events: [
       {
         id: 0,
@@ -146,6 +147,34 @@ function autoDevelop(s: GameState): GameEvent | null {
     text: `Les villageois élèvent : ${cat.name.toLowerCase()}.`,
   };
 }
+
+const VILLAGE_DECISIONS: ((s: GameState) => GameEvent | null)[] = [
+  (s) => {
+    if (s.resources.bois < 5) return null;
+    s.resources.bois -= 5;
+    s.moral = Math.min(100, s.moral + 3);
+    return { id: s.nextEventId++, year: s.year, kind: "info", text: "Les villageois décident seuls de réparer le pont du gué (-5 bois, +3 moral)." };
+  },
+  (s) => {
+    s.resources.or = Math.min(999, s.resources.or + 8);
+    s.moral = Math.min(100, s.moral + 2);
+    return { id: s.nextEventId++, year: s.year, kind: "joy", text: "Les villageois instaurent un marché hebdomadaire (+8 or, +2 moral)." };
+  },
+  (s) => {
+    s.resources.foi = Math.min(100, s.resources.foi + 6);
+    s.moral = Math.min(100, s.moral + 2);
+    return { id: s.nextEventId++, year: s.year, kind: "info", text: "Une veillée aux chandelles est organisée au village (+6 foi, +2 moral)." };
+  },
+  (s) => {
+    s.resources.or = Math.min(999, s.resources.or + 5);
+    s.moral = Math.max(0, s.moral - 4);
+    return { id: s.nextEventId++, year: s.year, kind: "danger", text: "Les villageois refusent une levée et cachent leurs réserves (+5 or, -4 moral)." };
+  },
+  (s) => {
+    s.moral = Math.min(100, s.moral + 2);
+    return { id: s.nextEventId++, year: s.year, kind: "info", text: "Le conseil des anciens tranche lui-même un conflit de voisinage (+2 moral)." };
+  },
+];
 
 function randomEvent(s: GameState): GameEvent | null {
   const roll = Math.random();
@@ -282,6 +311,11 @@ export function step(s: GameState): GameEvent[] {
 
   const auto = autoDevelop(s);
   if (auto) events.push(auto);
+
+  if (Math.random() < 0.08) {
+    const decision = pick(VILLAGE_DECISIONS)(s);
+    if (decision) events.push(decision);
+  }
 
   const cap = housingCap(s);
   if (s.resources.nourriture < 0) {

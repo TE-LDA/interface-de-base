@@ -1,8 +1,8 @@
 # chat-mistral
 
-App web de chat minimale qui appelle l'API Mistral avec le [SDK TypeScript officiel](https://github.com/mistralai/client-ts) (`@mistralai/mistralai`), modèle `mistral-small-latest`.
+Jeu de gestion médiéval en **React + TypeScript** (Vite) : un royaume vit et évolue tout seul, tick par tick (ressources, population, bâtiments, famines, guerres, successions), et sa **chronique uchronique** est narrée par l'API Mistral via le [SDK TypeScript officiel](https://github.com/mistralai/client-ts) (`@mistralai/mistralai`, modèle `mistral-small-latest`), exposé par un petit serveur Express.
 
-La clé `MISTRAL_API_KEY` n'est lue que côté serveur (`src/server.ts`) et n'est jamais envoyée au navigateur.
+La clé `MISTRAL_API_KEY` n'est lue que côté serveur (`src/server.ts`) et n'est jamais envoyée au navigateur. Sans clé valide, la chronique retombe sur le texte brut des événements.
 
 ## Installation et exécution locale
 
@@ -18,19 +18,31 @@ cp .env.example .env
 npm run dev
 ```
 
-Avant le premier `npm run dev`, ouvrez `chat-mistral/.env` dans un éditeur et renseignez `MISTRAL_API_KEY` (clé obtenue sur <https://console.mistral.ai/api-keys/>). Ouvrez ensuite <http://localhost:3000> dans un navigateur.
+Avant le premier `npm run dev`, ouvrez `chat-mistral/.env` dans un éditeur et renseignez `MISTRAL_API_KEY` (clé obtenue sur <https://console.mistral.ai/api-keys/>).
+
+`npm run dev` lance deux processus : l'API Express (port 3000) et le serveur de dev Vite (port 5173, qui proxifie `/api` vers l'API). Ouvrez ensuite <http://localhost:5173>.
+
+## Jouer
+
+- La partie tourne en boucle (1 tick = 1 mois, 12 ticks = 1 an) : **⏸/▶** pour pause, **vitesse ×1/×2/×4** pour accélérer.
+- Cliquez sur une case herbeuse pour choisir un bâtiment à construire (coûts en bois/pierre/or).
+- Les événements marquants (famine, peste, guerre, successions, uchronies) sont racontés dans la **Chronique** par `mistral-small-latest`.
+- La partie est sauvegardée dans `localStorage` : rechargez la page, le royaume continue là où il en était. **Nouvelle chronique** repart de zéro (nouvelle uchronie).
 
 ## Mode production
 
 ```bash
 npm run build
-npm start              # sert dist/server.js + public/ sur http://localhost:3000
+npm start
 ```
 
-La variable d'environnement `PORT` permet de changer le port (3000 par défaut).
+`npm run build` compile le serveur (`dist/`) et le client React (`dist-client/`) ; `npm start` sert le tout sur <http://localhost:3000> (variable `PORT` pour changer le port).
 
 ## Structure
 
-- `src/server.ts` — serveur Express : sert `public/` et expose `POST /api/chat`
-- `public/` — interface de chat statique (HTML/CSS/JS vanilla)
+- `src/server.ts` — serveur Express : expose `POST /api/chat` et sert le build client (`dist-client/`)
+- `client/src/game/sim.ts` — moteur de simulation (ticks, économie, événements aléatoires)
+- `client/src/game/chronicle.ts` — narration des événements via `/api/chat`
+- `client/src/App.tsx` — interface de jeu (carte du royaume, ressources, chronique)
+- `vite.config.ts` — config Vite (racine `client/`, proxy `/api` en dev)
 - `.env.example` — modèle de configuration (`.env` est ignoré par git)

@@ -39,11 +39,16 @@ app.post("/api/chat", async (req, res) => {
       .status(400)
       .json({ error: "Corps attendu : { \"messages\": [{ \"role\", \"content\" }] }" });
   }
+  const maxTokens =
+    typeof req.body?.maxTokens === "number" && req.body.maxTokens > 0
+      ? Math.min(Math.floor(req.body.maxTokens), 1024)
+      : undefined;
 
   try {
     const completion = await client.chat.complete({
       model: MODEL,
       messages: messages as ChatMessage[],
+      ...(maxTokens ? { maxTokens } : {}),
     });
     const content = completion.choices?.[0]?.message?.content;
     const reply =
@@ -59,9 +64,9 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-const publicDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public");
-app.use(express.static(publicDir));
-app.get("/", (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+const clientDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "dist-client");
+app.use(express.static(clientDir));
+app.get("/", (_req, res) => res.sendFile(path.join(clientDir, "index.html")));
 
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`Chat Mistral (${MODEL}) disponible sur http://localhost:${PORT}`);

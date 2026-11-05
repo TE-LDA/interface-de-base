@@ -116,6 +116,8 @@ export interface GameState {
   strategy: StrategyId;
   projects: Project[];
   totalInvesti: number;
+  investiParCat: Record<string, number>;
+  orDebutAnnee: number;
   techs: TechId[];
   nextEventId: number;
   running: boolean;

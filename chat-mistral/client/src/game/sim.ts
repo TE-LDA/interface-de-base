@@ -113,6 +113,7 @@ export function invest(s: GameState, cat: string, montant: number): GameEvent | 
   const c = PROJECT_CATS[cat] ?? PROJECT_CATS.commerce;
   s.resources.or -= m;
   s.totalInvesti += m;
+  s.investiParCat[cat] = (s.investiParCat[cat] ?? 0) + m;
   s.projects.push({
     id: s.nextEventId++,
     year: s.year,
@@ -185,6 +186,8 @@ export function createGame(): GameState {
     strategy: "equilibre",
     projects: [],
     totalInvesti: 0,
+    investiParCat: {},
+    orDebutAnnee: 20,
     events: [
       {
         id: 0,
@@ -432,19 +435,26 @@ export function step(s: GameState): GameEvent[] {
 
   for (let i = s.projects.length - 1; i >= 0; i--) {
     const p = s.projects[i];
-    const gain = projectGain(p.montant);
+    const memeCat = s.projects.filter((q) => q.cat === p.cat).length;
+    const saturation = Math.max(0.4, 1 - 0.2 * (memeCat - 1));
+    const volatilite = 0.7 + Math.random() * 0.6;
+    const gain = Math.max(1, Math.round(projectGain(p.montant) * saturation * volatilite));
     if (p.cat === "commerce") s.resources.or = Math.min(999, s.resources.or + gain);
     else if (p.cat === "foi") s.resources.foi = Math.min(100, s.resources.foi + gain);
     else if (p.cat === "science") s.resources.science = Math.min(999, s.resources.science + gain);
     else if (p.cat === "agriculture") s.resources.nourriture = Math.min(500, s.resources.nourriture + gain);
+    s.resources.or = Math.max(0, s.resources.or - Math.max(1, Math.round(p.montant * 0.02)));
     p.moisRestants -= 1;
-    if (p.moisRestants <= 0) {
+    if (Math.random() < 0.02 || p.moisRestants <= 0) {
+      const echoue = p.moisRestants > 0;
       s.projects.splice(i, 1);
       events.push({
         id: s.nextEventId++,
         year: y,
-        kind: "info",
-        text: `🏗️ Projet « ${p.nom} » terminé (${p.montant} 💰 investis, an ${p.year}).`,
+        kind: echoue ? "danger" : "info",
+        text: echoue
+          ? `⚠️ Le projet « ${p.nom} » échoue : ${p.montant} 💰 investis sont perdus.`
+          : `🏗️ Projet « ${p.nom} » terminé (${p.montant} 💰 investis, an ${p.year}).`,
       });
     }
   }
@@ -495,11 +505,13 @@ export function step(s: GameState): GameEvent[] {
   if (s.month >= 12) {
     s.month = 0;
     s.year += 1;
+    const deltaOr = Math.round(s.resources.or - s.orDebutAnnee);
+    s.orDebutAnnee = Math.round(s.resources.or);
     events.push({
       id: s.nextEventId++,
       year: s.year,
       kind: "info",
-      text: `Bilan de l'an ${s.year} : population ${s.population}, moral ${Math.round(s.moral)}, trésor ${s.resources.or} deniers, savoir ${Math.round(s.resources.science)} 📖.`,
+      text: `Bilan de l'an ${s.year} : population ${s.population}, moral ${Math.round(s.moral)}, trésor ${Math.round(s.resources.or)} deniers (${deltaOr >= 0 ? "+" : ""}${deltaOr} sur l'année), savoir ${Math.round(s.resources.science)} 📖.`,
     });
   }
 
@@ -508,6 +520,14 @@ export function step(s: GameState): GameEvent[] {
   s.resources.pierre = Math.min(999, Math.max(0, s.resources.pierre));
 
   return events;
+}
+
+export function estimateUpkeep(s: GameState): number {
+  return s.projects.reduce((a, p) => a + Math.max(1, Math.round(p.montant * 0.02)), 0);
+}
+
+export function estimateNet(s: GameState): number {
+  return estimateIncome(s) - estimateUpkeep(s);
 }
 
 export function estimateIncome(s: GameState): number {

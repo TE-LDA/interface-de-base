@@ -12,6 +12,8 @@ import {
   createGame,
   defense,
   estimateIncome,
+  estimateNet,
+  estimateUpkeep,
   freeTiles,
   housingCap,
   invest,
@@ -96,6 +98,8 @@ export default function App() {
       if (!saved.strategy) saved.strategy = "equilibre";
       saved.projects = saved.projects ?? [];
       if (typeof saved.totalInvesti !== "number") saved.totalInvesti = 0;
+      saved.investiParCat = saved.investiParCat ?? {};
+      if (typeof saved.orDebutAnnee !== "number") saved.orDebutAnnee = Math.round(saved.resources.or);
       saved.resources.science = saved.resources.science ?? 30;
       saved.events.forEach((e) => narrated.current.add(e.id));
     }
@@ -501,7 +505,11 @@ export default function App() {
             <div className="budget-or">
               {Math.round(r.or)} <small>pièces d'or</small>
             </div>
-            <div className="budget-income">+ ~{estimateIncome(state)} or/mois (marchés, auberges, projets)</div>
+            <div className="budget-income">
+              + ~{estimateIncome(state)} or/mois de revenus · − {estimateUpkeep(state)} d'entretien → net{" "}
+              {estimateNet(state) >= 0 ? "+" : ""}
+              {estimateNet(state)} or/mois
+            </div>
             <div className="budget-total">Investi depuis le début : {state.totalInvesti} 💰</div>
             {state.projects.length === 0 ? (
               <p className="budget-hint">

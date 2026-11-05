@@ -132,8 +132,7 @@ export default function App() {
                   ? { ...s, demandeConseil: { ...s.demandeConseil, titre: l.titre, corps: l.corps } }
                   : s
               );
-              pushChronicle(demande.year, `✉️ Lettre du conseil des anciens — « ${l.titre} »`);
-              setShowLettre(true);
+              pushChronicle(demande.year, `✉️ Lettre du conseil des anciens — « ${l.titre} » (dans votre courrier ✉️)`);
             })
             .catch(() => {
               pushChronicle(demande.year, `✉️ Le conseil envoie sa demande : ${demande.texte}`);
@@ -158,8 +157,8 @@ export default function App() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [chronicle.length]);
 
-  function pushChronicle(year: number, text: string) {
-    setChronicle((c) => [...c, { year, text }]);
+  function pushChronicle(year: number, text: string, kind?: "reply" | "event") {
+    setChronicle((c) => [...c, { year, text, kind }]);
   }
 
   function toggleRunning() {
@@ -234,7 +233,7 @@ export default function App() {
     setSending(true);
     try {
       const res = await sendOrder(trimmed, stateSummary(state));
-      if (res.reponse) pushChronicle(state.year, `🖋️ ${res.reponse}`);
+      if (res.reponse) pushChronicle(state.year, `🖋️ ${res.reponse}`, "reply");
       applyAction(res.action);
       if (hadDemande) {
         setState((s) => (s.demandeConseil ? { ...s, demandeConseil: null } : s));
@@ -427,7 +426,7 @@ export default function App() {
               </p>
             )}
             {chronicle.map((c, i) => (
-              <p key={i}>
+              <p key={i} className={c.kind === "reply" ? "reply" : undefined}>
                 <strong>An {c.year}</strong> — {c.text}
               </p>
             ))}
@@ -439,8 +438,9 @@ export default function App() {
             <h2>🖋️ Vos ordres</h2>
             {state.demandeConseil &&
               (state.demandeConseil.corps ? (
-                <button type="button" className="lettre-banner" onClick={() => setShowLettre(true)}>
-                  ✉️ Nouvelle lettre du conseil : « {state.demandeConseil.titre ?? state.demandeConseil.texte} » — cliquez pour lire en grand et arbitrer (OUI / NON)
+                <button type="button" className="courrier-btn" onClick={() => setShowLettre(true)}>
+                  ✉️ Courrier du conseil <span className="badge">1</span>
+                  <small>« {state.demandeConseil.titre ?? state.demandeConseil.texte} » — cliquez pour lire en grand et arbitrer (OUI / NON)</small>
                 </button>
               ) : (
                 <div className="demande-banner">

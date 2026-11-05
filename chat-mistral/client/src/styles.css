@@ -212,6 +212,13 @@ button:disabled {
   text-align: center;
 }
 
+.chronicle p.reply {
+  border-left-color: #5c7433;
+  background: rgba(125, 155, 74, 0.14);
+  border-radius: 0 8px 8px 0;
+  padding: 0.4rem 0.6rem 0.4rem 0.8rem;
+}
+
 .demande-banner {
   font-size: 0.88rem;
   font-style: italic;
@@ -223,12 +230,12 @@ button:disabled {
   margin-bottom: 0.55rem;
 }
 
-.lettre-banner {
+.courrier-btn {
   width: 100%;
   text-align: left;
-  font-variant: normal;
-  font-size: 0.88rem;
-  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  font-size: 0.95rem;
   color: #7c3524;
   background: #fbe4d4;
   border: 1px solid #8a3a2a;
@@ -238,8 +245,28 @@ button:disabled {
   box-shadow: 0 2px 6px rgba(80, 30, 10, 0.25);
 }
 
-.lettre-banner:hover:not(:disabled) {
+.courrier-btn:hover:not(:disabled) {
   background: #f8d5bd;
+}
+
+.courrier-btn .badge {
+  display: inline-block;
+  background: #a04a35;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  font-size: 0.78rem;
+  font-variant: normal;
+  margin: 0 0.3rem;
+}
+
+.courrier-btn small {
+  display: block;
+  font-variant: normal;
+  font-style: italic;
+  font-size: 0.8rem;
+  margin-top: 0.2rem;
+  color: #8a5a4a;
 }
 
 .letter-modal {

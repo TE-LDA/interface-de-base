@@ -112,4 +112,5 @@ export interface GameState {
 export interface ChronicleEntry {
   year: number;
   text: string;
+  kind?: "reply" | "event";
 }

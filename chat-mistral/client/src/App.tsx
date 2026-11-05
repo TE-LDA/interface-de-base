@@ -212,7 +212,7 @@ export default function App() {
       const accept = ACCEPT_RE.test(text);
       const refuse = REFUSE_RE.test(text);
       if (demande && (accept || refuse)) {
-        const out = accept ? demande.accorde : demande.refuser;
+        const out = accept ? demande.accorder : demande.refuser;
         setState((s) => {
           const next: GameState = {
             ...s,

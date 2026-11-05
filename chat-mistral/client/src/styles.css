@@ -25,7 +25,7 @@ body {
 }
 
 .app {
-  max-width: 880px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 0.8rem 1rem 0;
   display: flex;
@@ -119,16 +119,54 @@ button:disabled {
   color: #33270f;
 }
 
-.page {
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 350px;
+  gap: 0.9rem;
   flex: 1;
   min-height: 0;
+}
+
+.page {
+  min-height: 0;
   display: flex;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 150px);
+  padding-right: 2px;
+}
+
+.card {
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  background:
+    repeating-linear-gradient(0deg, rgba(120, 90, 40, 0.05) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, var(--parchemin-clair), var(--parchemin));
+  border: 2px solid var(--bordure);
+  outline: 3px double rgba(184, 134, 11, 0.45);
+  outline-offset: -7px;
+  box-shadow: 0 4px 14px rgba(60, 40, 10, 0.3);
+}
+
+.card h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  color: #6b4f26;
+  border-bottom: 1px solid var(--bordure);
+  padding-bottom: 0.4rem;
 }
 
 .chronicle {
   flex: 1;
   overflow-y: auto;
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 150px);
   min-height: 300px;
   padding: 1.2rem 1.6rem;
   border-radius: 4px;
@@ -174,27 +212,42 @@ button:disabled {
   text-align: center;
 }
 
-.orders {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding: 0.55rem 0.9rem 0.7rem;
-  margin: 0 -1rem;
-  background: linear-gradient(180deg, #4a3520, var(--bois-fonce));
-  border-top: 2px solid var(--or-clair);
-  box-shadow: 0 -6px 18px rgba(40, 26, 8, 0.45);
+.demande-banner {
+  font-size: 0.88rem;
+  font-style: italic;
+  color: #7c3524;
+  background: #fbe4d4;
+  border: 1px solid #8a3a2a;
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  margin-bottom: 0.55rem;
 }
 
-.demande-banner {
-  font-size: 0.9rem;
+.orders input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
   font-style: italic;
-  color: #f3d9a0;
-  background: rgba(138, 58, 42, 0.35);
-  border: 1px solid rgba(212, 160, 23, 0.7);
-  border-radius: 8px;
-  padding: 0.35rem 0.7rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 9px;
+  border: 2px solid var(--bordure);
+  background: #fff8e6;
+  color: var(--encre);
+  margin-bottom: 0.5rem;
+}
+
+.orders input:focus {
+  outline: 3px solid var(--or-clair);
+  outline-offset: -1px;
+}
+
+.orders .send {
+  width: 100%;
+  background: linear-gradient(180deg, #e0b23f, var(--or-clair));
+  color: #33270f;
+  font-size: 1rem;
+  padding: 0.55rem 0.9rem;
+  margin-bottom: 0.6rem;
 }
 
 .suggestions {
@@ -207,49 +260,45 @@ button:disabled {
   font-variant: normal;
   font-size: 0.78rem;
   font-style: italic;
-  padding: 0.2rem 0.65rem;
+  padding: 0.25rem 0.65rem;
   border-radius: 999px;
-  border: 1px solid rgba(212, 160, 23, 0.6);
-  background: rgba(250, 242, 221, 0.12);
-  color: #e8d9b5;
+  border: 1px solid var(--bordure);
+  background: #fff6e0;
+  color: var(--encre);
   box-shadow: none;
 }
 
 .suggestion:hover:not(:disabled) {
-  background: rgba(250, 242, 221, 0.28);
+  background: #ffeec4;
 }
 
-.order-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
+.controls-card button {
+  width: 100%;
+  margin-bottom: 0.45rem;
+  text-align: left;
 }
 
-.orders .quill {
-  font-size: 1.3rem;
+.controls-card button:last-of-type {
+  margin-bottom: 0;
 }
 
-.orders input {
-  flex: 1;
-  font-family: inherit;
-  font-size: 1.05rem;
+.lois-count {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
   font-style: italic;
-  padding: 0.6rem 0.9rem;
-  border-radius: 9px;
-  border: 2px solid var(--bordure);
-  background: var(--parchemin-clair);
-  color: var(--encre);
+  color: #7a5a2e;
 }
 
-.orders input:focus {
-  outline: 3px solid var(--or-clair);
-  outline-offset: -1px;
-}
-
-.orders .order-row > button {
-  background: linear-gradient(180deg, #e0b23f, var(--or-clair));
-  color: #33270f;
-  white-space: nowrap;
+@media (max-width: 940px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .panel {
+    max-height: none;
+  }
+  .chronicle {
+    max-height: 55vh;
+  }
 }
 
 .overlay {

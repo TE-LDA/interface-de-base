@@ -376,64 +376,78 @@ export default function App() {
           <span className="chip">🛡️ {defense(state)}</span>
         </div>
         <div className="controls">
-          <button type="button" onClick={toggleRunning}>
-            {state.running ? "⏸ Pause" : "▶ Reprendre"}
-          </button>
-          <button type="button" onClick={cycleSpeed} title="Vitesse de simulation">
-            Vitesse ×{state.speed}
-          </button>
-          <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev} title="Le village se développe tout seul">
-            🏘️ Auto : {state.autoDev ? "oui" : "non"}
-          </button>
           <button type="button" onClick={() => setShowMap(true)} title="Carte du domaine, lois et sciences">
             🗺️ Domaine
-          </button>
-          <button type="button" onClick={newGame} title="Recommencer une nouvelle uchronie">
-            ✨ Nouveau
           </button>
         </div>
       </header>
 
-      <main className="page">
-        <div className="chronicle" ref={chronicleRef}>
-          <h2>📜 Chronique du royaume de {state.kingdom}</h2>
-          {chronicle.length === 0 && <p className="empty">Les siècles s'écoulent…</p>}
-          {chronicle.map((c, i) => (
-            <p key={i}>
-              <strong>An {c.year}</strong> — {c.text}
-            </p>
-          ))}
-        </div>
-      </main>
-
-      <form className="orders" onSubmit={submitOrder}>
-        {state.demandeConseil && (
-          <div className="demande-banner">
-            🙇 Le conseil des anciens attend votre réponse : « {state.demandeConseil.texte} » — répondez par exemple « accorde » ou « refuse ».
+      <div className="layout">
+        <main className="page">
+          <div className="chronicle" ref={chronicleRef}>
+            <h2>📜 Chronique du royaume de {state.kingdom}</h2>
+            {chronicle.length === 0 && (
+              <p className="empty">
+                Vous êtes le seigneur de {state.kingdom}. Le royaume vit tout seul, tick par tick.
+                Écrivez vos ordres dans le panneau de droite pour agir, ou laissez l'uchronie se dérouler…
+              </p>
+            )}
+            {chronicle.map((c, i) => (
+              <p key={i}>
+                <strong>An {c.year}</strong> — {c.text}
+              </p>
+            ))}
           </div>
-        )}
-        <div className="suggestions">
-          {SUGGESTIONS.map((s) => (
-            <button key={s} type="button" className="suggestion" onClick={() => setOrder(s)}>
-              {s}
+        </main>
+
+        <aside className="panel">
+          <form className="card orders" onSubmit={submitOrder}>
+            <h2>🖋️ Vos ordres</h2>
+            {state.demandeConseil && (
+              <div className="demande-banner">
+                🙇 Le conseil des anciens attend votre réponse : « {state.demandeConseil.texte} » — répondez « accorde » ou « refuse ».
+              </div>
+            )}
+            <input
+              type="text"
+              value={order}
+              onChange={(e) => setOrder(e.target.value)}
+              placeholder="Écrivez votre ordre ici… (Entrée ⏎ pour envoyer)"
+              disabled={sending}
+              autoFocus
+            />
+            <button type="submit" className="send" disabled={sending || !order.trim()}>
+              {sending ? "Le héraut part…" : "Envoyer l'ordre ➤"}
             </button>
-          ))}
-        </div>
-        <div className="order-row">
-          <span className="quill">🖋️</span>
-          <input
-            type="text"
-            value={order}
-            onChange={(e) => setOrder(e.target.value)}
-            placeholder="Donnez vos ordres, seigneur… (Entrée ⏎ pour envoyer)"
-            disabled={sending}
-            autoFocus
-          />
-          <button type="submit" disabled={sending || !order.trim()}>
-            {sending ? "Le héraut part…" : "Envoyer ➤"}
-          </button>
-        </div>
-      </form>
+            <div className="suggestions">
+              {SUGGESTIONS.map((s) => (
+                <button key={s} type="button" className="suggestion" onClick={() => setOrder(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </form>
+
+          <div className="card controls-card">
+            <h2>⚙️ Le royaume</h2>
+            <button type="button" onClick={toggleRunning}>
+              {state.running ? "⏸ Mettre en pause" : "▶ Reprendre"}
+            </button>
+            <button type="button" onClick={cycleSpeed}>
+              Vitesse de simulation : ×{state.speed}
+            </button>
+            <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev}>
+              🏘️ Village autonome : {state.autoDev ? "oui" : "non"}
+            </button>
+            <button type="button" onClick={newGame}>
+              ✨ Nouvelle chronique (recommencer)
+            </button>
+            <p className="lois-count">
+              📜 {state.decrets.length} loi(s) et ordres en vigueur — voir dans 🗺️ Domaine
+            </p>
+          </div>
+        </aside>
+      </div>
 
       {showMap && (
         <div className="overlay" onClick={() => setShowMap(false)}>

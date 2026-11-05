@@ -6,14 +6,19 @@ La clé `MISTRAL_API_KEY` n'est lue que côté serveur (`src/server.ts`) et n'es
 
 ## Installation et exécution locale
 
+Depuis un terminal, à partir du dépôt (l'app vit sur la branche `vibe/chat-mistral-web-4bb1a1` de la PR #2, pas encore sur `main`) :
+
 ```bash
+git clone https://github.com/TE-LDA/interface-de-base.git
+cd interface-de-base
+git checkout vibe/chat-mistral-web-4bb1a1
 cd chat-mistral
 npm install
-cp .env.example .env   # puis renseigner MISTRAL_API_KEY dans .env
-npm run dev            # démarre sur http://localhost:3000
+cp .env.example .env
+npm run dev
 ```
 
-Ouvrir ensuite <http://localhost:3000> dans un navigateur.
+Avant le premier `npm run dev`, ouvrez `chat-mistral/.env` dans un éditeur et renseignez `MISTRAL_API_KEY` (clé obtenue sur <https://console.mistral.ai/api-keys/>). Ouvrez ensuite <http://localhost:3000> dans un navigateur.
 
 ## Mode production
 

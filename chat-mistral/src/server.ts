@@ -54,9 +54,7 @@ app.post("/api/chat", async (req, res) => {
     const reply =
       typeof content === "string"
         ? content
-        : (content
-            ?.map((chunk) => ("text" in chunk ? chunk.text : ""))
-            .join("") ?? "");
+        : (content?.map((chunk) => ("text" in chunk ? chunk.text : "")).join("") ?? "");
     res.json({ reply });
   } catch (err) {
     console.error("Erreur API Mistral:", err);
@@ -64,25 +62,9 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// ---------- Contrat strict + sanitization pour /api/order ----------
+// ---------- Contrat Bailli + sanitization ----------
 
-const BUILDING_KEYS = [
-  "ferme", "moulin", "maison", "église", "atelier", "marché", "tour",
-  "cabane", "carrière", "scriptorium", "bibliothèque", "université", "auberge",
-];
-const CATEGORIES = ["commerce", "foi", "science", "defense", "agriculture", "sante"];
-const MESURES = ["moulin", "octroi", "taille", "corvee", "gite", "ost", "grenier", "justice", "mariage", "chasse"];
-
-const BOUNDS: Record<string, [number, number]> = {
-  nourriture: [-30, 30],
-  bois: [-30, 30],
-  pierre: [-30, 30],
-  or: [-30, 30],
-  science: [-30, 30],
-  moral: [-15, 15],
-  foi: [-15, 15],
-  population: [-6, 6],
-};
+const ASSET_CATS = ["château", "ferme", "grenier", "moulin", "marché", "port", "auberge", "maison", "tour", "église", "scriptorium"];
 
 function clampInt(v: unknown, min: number, max: number): number {
   return typeof v === "number" && Number.isFinite(v)
@@ -90,107 +72,89 @@ function clampInt(v: unknown, min: number, max: number): number {
     : 0;
 }
 
-interface SanitizedOrder {
-  reponse: string;
-  action: Record<string, unknown> & { type: string };
-}
-
-function sanitizeOrder(raw: string, budgetOr: number): SanitizedOrder {
-  const fallback: SanitizedOrder = {
-    reponse:
-      raw.slice(0, 600) || "Le héraut revient bredouille : l'ordre n'a pas été compris.",
-    action: { type: "rien" },
-  };
-  let parsed: unknown = null;
+function parseJson(raw: string): Record<string, unknown> | null {
   try {
-    parsed = JSON.parse(raw);
+    const p: unknown = JSON.parse(raw);
+    if (p && typeof p === "object") return p as Record<string, unknown>;
+    return null;
   } catch {
     const m = raw.match(/\{[\s\S]*\}/);
     if (m) {
       try {
-        parsed = JSON.parse(m[0]);
+        const p: unknown = JSON.parse(m[0]);
+        if (p && typeof p === "object") return p as Record<string, unknown>;
       } catch {
-        parsed = null;
+        return null;
       }
     }
+    return null;
   }
-  if (!parsed || typeof parsed !== "object") return fallback;
-  const o = parsed as Record<string, unknown>;
+}
+
+function sanitizeContract(raw: string, budget: number) {
+  const fallback = {
+    narrative_response: raw.slice(0, 600) || "Le Bailli n'a rien compris à l'ordre.",
+    state_updates: { treasury_change: 0, unrest_change: 0, prestige_change: 0 },
+    comparative_simulation: undefined as unknown,
+  };
+  const o = parseJson(raw);
+  if (!o) return fallback;
 
   const narrative =
-    typeof o.chronique_narrative === "string" && o.chronique_narrative
-      ? o.chronique_narrative
-      : typeof o.reponse === "string"
-        ? o.reponse
-        : "";
-  const feasible = o.faisabilite !== false;
-  const reason = typeof o.raison_incoherence === "string" ? o.raison_incoherence : "";
+    typeof o.narrative_response === "string" && o.narrative_response
+      ? o.narrative_response.slice(0, 800)
+      : raw.slice(0, 600) || fallback.narrative_response;
 
-  const modifs =
-    o.modificateurs && typeof o.modificateurs === "object"
-      ? (o.modificateurs as Record<string, unknown>)
+  const su =
+    o.state_updates && typeof o.state_updates === "object"
+      ? (o.state_updates as Record<string, unknown>)
       : {};
-  const effets: Record<string, number> = {};
-  if (feasible) {
-    for (const [key, [mn, mx]] of Object.entries(BOUNDS)) {
-      const v = modifs[key] ?? (key === "nourriture" ? modifs.ble : undefined);
-      const c = clampInt(v, mn, mx);
-      if (c !== 0) effets[key] = c;
-    }
+  const state_updates = {
+    treasury_change: clampInt(su.treasury_change, -Math.max(1, budget), 100),
+    unrest_change: clampInt(su.unrest_change, -15, 15),
+    prestige_change: clampInt(su.prestige_change, -15, 15),
+  };
+
+  let new_asset_queue: Record<string, unknown> | undefined;
+  if (su.new_asset_queue && typeof su.new_asset_queue === "object") {
+    const q = su.new_asset_queue as Record<string, unknown>;
+    const cat = typeof q.cat === "string" && ASSET_CATS.includes(q.cat) ? q.cat : "marché";
+    new_asset_queue = {
+      id: String(q.id ?? `asset_${Date.now()}`).slice(0, 60),
+      name: String(q.name ?? "chantier").slice(0, 80),
+      level: clampInt(q.level, 1, 3) || 1,
+      construction_ticks: Math.max(1, Math.min(12, clampInt(q.construction_ticks, 1, 12) || 1)),
+      monthly_revenue: clampInt(q.monthly_revenue, 0, 50),
+      monthly_upkeep: clampInt(q.monthly_upkeep, 0, 20),
+      cat,
+    };
+    state_updates.treasury_change = Math.min(state_updates.treasury_change, 0);
   }
 
-  let reponse = (narrative || raw.slice(0, 600) || fallback.reponse).slice(0, 600);
-  if (!feasible) {
-    reponse = `${reason || "Ordre irréalisable."} ${narrative}`.trim().slice(0, 600);
-    for (const k of Object.keys(effets)) delete effets[k];
+  let comparative_simulation: unknown;
+  if (o.comparative_simulation && typeof o.comparative_simulation === "object") {
+    const cs = o.comparative_simulation as Record<string, unknown>;
+    const num = (v: unknown) => clampInt(v, -9999, 9999);
+    const base = cs.baseline && typeof cs.baseline === "object" ? (cs.baseline as Record<string, unknown>) : {};
+    const en = cs.enacted && typeof cs.enacted === "object" ? (cs.enacted as Record<string, unknown>) : {};
+    const rows = Array.isArray(cs.tradeoff_summary) ? cs.tradeoff_summary.slice(0, 8) : [];
+    comparative_simulation = {
+      baseline: Object.fromEntries(Object.entries(base).slice(0, 8).map(([k, v]) => [k, num(v)])),
+      enacted: Object.fromEntries(Object.entries(en).slice(0, 8).map(([k, v]) => [k, num(v)])),
+      tradeoff_summary: rows
+        .filter((r) => r && typeof r === "object")
+        .map((r) => {
+          const row = r as Record<string, unknown>;
+          return {
+            metric: String(row.metric ?? "").slice(0, 60),
+            impact: typeof row.impact === "number" ? num(row.impact) : String(row.impact ?? "").slice(0, 40),
+            delta: String(row.delta ?? "").slice(0, 80),
+          };
+        }),
+    };
   }
 
-  const actions = Array.isArray(o.actions) ? o.actions.slice(0, 5) : [];
-  for (const a of actions) {
-    if (!a || typeof a !== "object") continue;
-    const act = a as Record<string, unknown>;
-    if (act.type === "build" && typeof act.batiment === "string" && BUILDING_KEYS.includes(act.batiment)) {
-      return {
-        reponse,
-        action: {
-          type: "build",
-          batiment: act.batiment,
-          quantite: Math.max(1, Math.min(12, clampInt(act.quantite, 1, 12) || 1)),
-        },
-      };
-    }
-    if (act.type === "invest" && typeof act.categorie === "string" && CATEGORIES.includes(act.categorie)) {
-      return {
-        reponse,
-        action: {
-          type: "invest",
-          projet: act.categorie,
-          montant: Math.max(1, Math.min(Math.max(1, Math.floor(budgetOr)), clampInt(act.montant, 1, 9999) || 1)),
-        },
-      };
-    }
-    if (act.type === "mesure" && typeof act.mesure === "string" && MESURES.includes(act.mesure)) {
-      return { reponse, action: { type: "mesure", mesure: act.mesure } };
-    }
-    if (act.type === "decret") {
-      return {
-        reponse,
-        action: {
-          type: "decret",
-          titre: String(act.titre ?? "").slice(0, 120),
-          texte: String(act.texte ?? "").slice(0, 500),
-          effets,
-        },
-      };
-    }
-    if (act.type === "ressources") {
-      return { reponse, action: { type: "ressources", effets } };
-    }
-  }
-  if (Object.keys(effets).length > 0) {
-    return { reponse, action: { type: "ressources", effets } };
-  }
-  return { reponse, action: { type: "rien" } };
+  return { narrative_response: narrative, state_updates: { ...state_updates, ...(new_asset_queue ? { new_asset_queue } : {}) }, comparative_simulation };
 }
 
 app.post("/api/order", async (req, res) => {
@@ -200,36 +164,32 @@ app.post("/api/order", async (req, res) => {
       .status(400)
       .json({ error: "Corps attendu : { \"order\": \"...\", \"state\": {...} }" });
   }
-  const stateSummary =
-    req.body?.state && typeof req.body.state === "object"
-      ? JSON.stringify(req.body.state).slice(0, 4000)
-      : "{}";
-  const budgetOr =
-    req.body?.state && typeof req.body.state === "object" && typeof (req.body.state as Record<string, unknown>).budget_or === "number"
-      ? Math.max(0, Math.floor((req.body.state as Record<string, unknown>).budget_or as number))
+  const stateObj = req.body?.state && typeof req.body.state === "object" ? req.body.state as Record<string, unknown> : {};
+  const stateSummary = JSON.stringify(stateObj).slice(0, 4000);
+  const budget =
+    typeof stateObj.budget === "number" && Number.isFinite(stateObj.budget)
+      ? Math.max(0, Math.floor(stateObj.budget))
       : 9999;
 
   const system = [
-    "Tu es le moteur de simulation et le scribe d'un jeu de gestion médiéval (style Pax Historia).",
-    "Le joueur est le seigneur et écrit ses décisions en texte libre. Tu analyses l'ordre et réponds STRICTEMENT en JSON, sans aucun texte hors du JSON.",
-    `État actuel du royaume (seul état fiable — ne jamais inventer de chiffres) : ${stateSummary}`,
-    "CONTRAT DE SORTIE — objet JSON valide, structure exacte :",
-    '{ "chronique_narrative": "paragraphe de 2 à 4 phrases, français, ton de chroniqueur médiéval",',
-    '  "modificateurs": { "nourriture": int, "bois": int, "pierre": int, "or": int, "science": int, "moral": int, "foi": int, "population": int },',
-    '  "faisabilite": true|false, "raison_incoherence": "vide si faisable",',
-    '  "actions": [ { "type": "build"|"invest"|"mesure"|"decret",',
-    '    "batiment"?: "clé du catalogue batiments_disponibles", "quantite"?: 1-12,',
-    '    "categorie"?: "commerce|foi|science|defense|agriculture|sante", "montant"?: int (en or, ≤ budget_or),',
-    '    "mesure"?: "moulin|octroi|taille|corvee|gite|ost|grenier|justice|mariage|chasse",',
-    '    "titre"?: string, "texte"?: string } ] }',
-    "RÈGLES STRICTES :",
-    "- modificateurs = deltas relatifs à l'état, jamais des absolues. Bornes : |nourriture/bois/pierre/or/science| ≤ 30 ; moral/foi ∈ [-15,15] ; population ∈ [-6,6].",
-    "- Ordre irréalisable → faisabilite=false, raison_incoherence remplie, modificateurs à 0.",
-    "- Toute décision réaliste produit un effet + ET un effet − (ex. taille : +or, −moral).",
-    "- Un investissement = actif durable : niveau selon le montant (<50=N1, 50-149=N2, ≥150=N3), chantier de quelques mois puis revenus permanents − entretien.",
-    "- À partir de 50 or investis, les conseillers déclenchent une stratégie concrète (bâtiment offert + effets + et −) : décris-la dans la chronique.",
-    "- Si demande_en_attente non null, le seigneur arbitre la lettre du conseil : « accorde/oui » → petits effets +, « refuse/non » → petits effets −, autre → selon le sens ; le conseil réagit dans la chronique.",
-    "- Ne jamais inventer de bâtiment hors de batiments_disponibles. Reste concis.",
+    "Tu es le Bailli principal et Chancelier du domaine seigneurial.",
+    "Ton rôle est d'analyser les ordres libres ou arbitrages du Seigneur et de générer une simulation chiffrée comparative rigoureuse.",
+    "RÈGLES D'ANALYSE :",
+    "1. ÉVALUATION DE POSTURE : identifie si le Seigneur valide (VALIDATION), refuse (REFUS), négocie à la baisse (NEGOCIATION_BASSE), surinvestit (SURINVESTISSEMENT), ou impose corvée/loi (DECRET_LIBRE).",
+    "2. COMPARAISON DE DATAS : génère systématiquement les métriques de base (proposition du Conseil) et les métriques réelles adaptées aux exigences du Seigneur.",
+    "   - Surinvestissement (+💰) : réduit les délais (ticks), augmente le niveau initial ou le rendement.",
+    "   - Négociation basse (-💰) : augmente le délai, le risque de malfaçon/usure, ou baisse le rendement.",
+    "   - Corvée : réduit le coût en or, mais augmente l'inquiétude (unrest) et pénalise la nourriture.",
+    "3. FORMAT DE SORTIE : réponds EXCLUSIVEMENT avec un objet JSON valide, sans texte autour :",
+    '{ "player_intent": { "raw_input": string, "posture": "VALIDATION|REFUS|NEGOCIATION_BASSE|SURINVESTISSEMENT|DECRET_LIBRE", "target_asset": string },',
+    '  "comparative_simulation": { "baseline": { "cost": int, "construction_ticks": int, "projected_level": 1-3, "risk_factor": int },',
+    '    "enacted": { idem }, "tradeoff_summary": [ { "metric": string, "impact": int|string, "delta": string } ] },',
+    '  "state_updates": { "treasury_change": int (borné : min -budget, max +100), "unrest_change": int [-15,15], "prestige_change": int [-15,15],',
+    '    "new_asset_queue"?: { "id": string, "name": string, "level": 1-3, "construction_ticks": 1-12, "monthly_revenue": 0-50, "monthly_upkeep": 0-20, "cat": "' + ASSET_CATS.join("|") + '", "emoji": string } },',
+    '  "narrative_response": "2-4 phrases, français, ton du Bailli qui parle au Seigneur" }',
+    `État actuel du domaine (seul état fiable, ne jamais inventer de chiffres) : ${stateSummary}`,
+    "Si l'ordre est irréalisable (budget insuffisant, absurde) : treasury_change=0, pas de new_asset_queue, narrative_response explique le refus.",
+    "Si une lettre du conseil est en attente (pendingLetters dans l'état) et que le Seigneur y répond : 'accorde/oui' → effets positifs faibles, 'refuse/non' → effets négatifs faibles, autre → selon le sens.",
   ].join(" ");
 
   try {
@@ -239,13 +199,12 @@ app.post("/api/order", async (req, res) => {
         { role: "system", content: system },
         { role: "user", content: order.trim() },
       ],
-      maxTokens: 400,
+      maxTokens: 500,
       responseFormat: { type: "json_object" },
     });
     const content = completion.choices?.[0]?.message?.content;
     const raw = typeof content === "string" ? content : "";
-    const sanitized = sanitizeOrder(raw, budgetOr);
-    res.json(sanitized);
+    res.json(sanitizeContract(raw, budget));
   } catch (err) {
     console.error("Erreur API Mistral (order):", err);
     res.status(502).json({ error: "Échec de l'appel à l'API Mistral." });
@@ -262,11 +221,11 @@ app.post("/api/letter", async (req, res) => {
       ? JSON.stringify(req.body.state).slice(0, 4000)
       : "{}";
   const system = [
-    "Tu es le secrétaire du conseil des anciens d'un royaume médiéval uchronique.",
-    `État du royaume (JSON) : ${stateSummary}`,
+    "Tu es le secrétaire du conseil des anciens d'un domaine seigneurial médiéval (uchronie).",
+    `État du domaine (JSON) : ${stateSummary}`,
     `Le conseil veut soumettre au seigneur la proposition suivante : "${sujet.trim()}"`,
-    "Rédige la LETTRE officielle que le conseil enverra au seigneur, AVEC l'argumentation complète pour arbitrer.",
-    'Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour : { "titre": "titre de la lettre", "corps": "3 à 6 phrases en français, style lettre officielle médiévale : salutation, exposé de la demande, arguments POUR, coûts et risques éventuels, formule de clôture." }',
+    "Rédige la LETTRE officielle envoyée au seigneur, AVEC l'argumentation complète pour arbitrer.",
+    'Réponds UNIQUEMENT en JSON valide : { "titre": string, "corps": "3 à 6 phrases en français, style lettre officielle médiévale : salutation, exposé, arguments POUR, coûts/risques, formule de clôture." }',
   ].join(" ");
 
   try {
@@ -274,35 +233,19 @@ app.post("/api/letter", async (req, res) => {
       model: MODEL,
       messages: [
         { role: "system", content: system },
-        { role: "user", content: `Rédige la lettre du conseil pour la proposition : ${sujet.trim()}` },
+        { role: "user", content: `Rédige la lettre du conseil pour : ${sujet.trim()}` },
       ],
       maxTokens: 300,
       responseFormat: { type: "json_object" },
     });
     const content = completion.choices?.[0]?.message?.content;
     const raw = typeof content === "string" ? content : "";
-    let parsed: unknown = null;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (m) {
-        try {
-          parsed = JSON.parse(m[0]);
-        } catch {
-          parsed = null;
-        }
-      }
-    }
-    const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    const o = parseJson(raw) ?? {};
     res.json({
-      titre:
-        typeof obj.titre === "string" && obj.titre
-          ? obj.titre
-          : "Lettre du conseil des anciens",
+      titre: typeof o.titre === "string" && o.titre ? o.titre : "Lettre du conseil des anciens",
       corps:
-        typeof obj.corps === "string" && obj.corps
-          ? obj.corps
+        typeof o.corps === "string" && o.corps
+          ? o.corps
           : `Le conseil des anciens soumet au seigneur la proposition suivante : ${sujet.trim()}.`,
     });
   } catch (err) {
@@ -316,5 +259,5 @@ app.use(express.static(clientDir));
 app.get("/", (_req, res) => res.sendFile(path.join(clientDir, "index.html")));
 
 app.listen(PORT, "127.0.0.1", () => {
-  console.log(`Royaume (${MODEL}) disponible sur http://localhost:${PORT}`);
+  console.log(`Domaine seigneurial (${MODEL}) sur http://localhost:${PORT}`);
 });

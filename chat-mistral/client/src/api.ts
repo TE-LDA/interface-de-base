@@ -1,22 +1,4 @@
-import type { OrderResponse } from "./game/types";
-
-export type ChatMessage = {
-  role: "system" | "user" | "assistant";
-  content: string;
-};
-
-export async function sendChat(messages: ChatMessage[], maxTokens?: number): Promise<string> {
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, ...(maxTokens ? { maxTokens } : {}) }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || "Erreur serveur");
-  }
-  return data.reply;
-}
+import type { OrderContract } from "./game/types";
 
 export interface Lettre {
   titre: string;
@@ -30,27 +12,27 @@ export async function sendLetter(sujet: string, state: unknown): Promise<Lettre>
     body: JSON.stringify({ sujet, state }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || "Erreur serveur");
-  }
+  if (!res.ok) throw new Error(data.error || "Erreur serveur");
   return {
     titre: typeof data.titre === "string" ? data.titre : "Lettre du conseil des anciens",
     corps: typeof data.corps === "string" ? data.corps : sujet,
   };
 }
 
-export async function sendOrder(order: string, state: unknown): Promise<OrderResponse> {
+export async function sendOrder(order: string, state: unknown): Promise<OrderContract> {
   const res = await fetch("/api/order", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ order, state }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || "Erreur serveur");
-  }
+  if (!res.ok) throw new Error(data.error || "Erreur serveur");
   return {
-    reponse: typeof data.reponse === "string" ? data.reponse : "",
-    action: data.action,
+    narrative_response:
+      typeof data.narrative_response === "string" && data.narrative_response
+        ? data.narrative_response
+        : "Le Bailli n'a rien compris à l'ordre.",
+    state_updates: data.state_updates ?? { treasury_change: 0, unrest_change: 0, prestige_change: 0 },
+    comparative_simulation: data.comparative_simulation,
   };
 }

@@ -1,147 +1,116 @@
-export type Season = "Printemps" | "Été" | "Automne" | "Hiver";
+export interface Meta {
+  turn: number;
+  year: number;
+  month: string;
+  dynastyName: string;
+  rulerTitle: string;
+}
 
-export type BuildingType =
-  | "château"
-  | "ferme"
-  | "moulin"
-  | "maison"
-  | "église"
-  | "atelier"
-  | "marché"
-  | "tour"
-  | "cabane"
-  | "carrière"
-  | "scriptorium"
-  | "bibliothèque"
-  | "université"
-  | "auberge";
+export interface Metrics {
+  treasury: number;
+  monthlyIncome: number;
+  monthlyUpkeep: number;
+  population: number;
+  foodReserve: number;
+  unrest: number;
+  prestige: number;
+}
 
-export type TechId = "assollement" | "horlogerie" | "medecine" | "remparts" | "imprimerie";
+export type MacroId =
+  | "prosperity"
+  | "faith"
+  | "defense"
+  | "knowledge"
+  | "expansion"
+  | "balance";
 
-export type StrategyId =
-  | "equilibre"
-  | "prospérité"
-  | "foi"
-  | "défense"
-  | "savoir"
-  | "expansion";
+export interface MacroOrientations {
+  prosperity: number;
+  faith: number;
+  defense: number;
+  knowledge: number;
+  expansion: number;
+  balance: number;
+}
 
-export interface Building {
-  type: BuildingType;
+export type AssetStatus = "building" | "active" | "damaged";
+
+export interface Asset {
+  id: string;
+  name: string;
+  emoji: string;
+  cat: string;
+  level: 1 | 2 | 3;
+  status: AssetStatus;
+  remainingTicks: number;
+  monthlyRevenue: number;
+  monthlyUpkeep: number;
+  foodYield: number;
+  prestigeYield: number;
+  defense: number;
   x: number;
   y: number;
-  progress: number;
-  done: boolean;
 }
 
-export interface Resources {
-  nourriture: number;
-  bois: number;
-  pierre: number;
-  or: number;
-  foi: number;
-  science: number;
-}
-
-export type EventKind = "info" | "danger" | "joy";
-
-export interface GameEvent {
-  id: number;
+export interface Letter {
+  id: string;
   year: number;
-  kind: EventKind;
-  text: string;
-}
-
-export interface OrderDevis {
-  bois?: number;
-  pierre?: number;
-  or?: number;
-}
-
-export interface Decret {
-  id: number;
-  year: number;
-  titre: string;
-  texte: string;
-}
-
-export interface OrderAction {
-  type: "build" | "ressources" | "decret" | "invest" | "mesure" | "rien";
-  batiment?: string;
-  quantite?: number;
-  devis?: OrderDevis;
-  titre?: string;
-  texte?: string;
-  projet?: string;
-  montant?: number;
-  mesure?: string;
-  effets?: Record<string, number>;
-}
-
-export interface Project {
-  id: number;
-  year: number;
-  cat: string;
-  nom: string;
-  emoji: string;
-  montant: number;
-  niveau: number;
-  actif: boolean;
-  moisRestants: number;
-  yield: number;
-  upkeep: number;
-}
-
-export interface Buff {
-  id: number;
-  nom: string;
-  moisRestants: number;
-  defense?: number;
-  chantierX2?: boolean;
-}
-
-export interface DemandeConseil {
-  id: number;
-  year: number;
-  texte: string;
+  sujet: string;
   titre?: string;
   corps?: string;
 }
 
-export interface OrderResponse {
-  reponse: string;
-  action?: OrderAction;
+export type LogKind = "info" | "danger" | "joy" | "reply";
+
+export interface LogEntry {
+  id: number;
+  year: number;
+  kind: LogKind;
+  text: string;
 }
 
 export interface GameState {
-  kingdom: string;
-  dynasty: string;
-  ruler: string;
-  year: number;
-  month: number;
-  resources: Resources;
-  population: number;
-  moral: number;
-  buildings: Building[];
-  events: GameEvent[];
-  decrets: Decret[];
-  demandeConseil: DemandeConseil | null;
-  strategy: StrategyId;
-  projects: Project[];
-  totalInvesti: number;
-  investiParCat: Record<string, number>;
-  orDebutAnnee: number;
-  mesures: string[];
-  buffs: Buff[];
-  techs: TechId[];
-  nextEventId: number;
+  meta: Meta;
+  metrics: Metrics;
+  macro: MacroOrientations;
+  assets: Asset[];
+  pendingLetters: Letter[];
+  chronicle: LogEntry[];
   running: boolean;
   speed: number;
   autoDev: boolean;
+  nextId: number;
+  foodStock: number;
 }
 
-export interface ChronicleEntry {
-  year: number;
-  text: string;
-  kind?: "reply" | "event";
+export interface ImpactRow {
+  metric: string;
+  impact: number | string;
+  delta: string;
+}
+
+export interface ImpactReport {
+  baseline: Record<string, number>;
+  enacted: Record<string, number>;
+  tradeoff_summary: ImpactRow[];
+}
+
+export interface OrderContract {
+  narrative_response: string;
+  state_updates: {
+    treasury_change: number;
+    unrest_change: number;
+    prestige_change: number;
+    new_asset_queue?: {
+      id: string;
+      name: string;
+      level: 1 | 2 | 3;
+      construction_ticks: number;
+      monthly_revenue: number;
+      monthly_upkeep: number;
+      cat?: string;
+      emoji?: string;
+    };
+  };
+  comparative_simulation?: ImpactReport;
 }

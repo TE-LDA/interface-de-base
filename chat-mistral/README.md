@@ -1,12 +1,10 @@
 # chat-mistral
 
-Jeu de gestion médiéval en **React + TypeScript** (Vite) : un royaume vit et évolue tout seul, tick par tick (ressources, population, bâtiments, famines, guerres, successions), et sa **chronique uchronique** est narrée par l'API Mistral via le [SDK TypeScript officiel](https://github.com/mistralai/client-ts) (`@mistralai/mistralai`, modèle `mistral-small-latest`), exposé par un petit serveur Express.
+**Jeu de gestion économique de domaine médiéval** (style Pax Historia) en React + TypeScript (Vite) + Express. Le joueur rédige ses **ordres en texte libre** ; l'**IA Bailli** (`mistral-small-latest`, SDK officiel `@mistralai/mistralai`) analyse chaque ordre et renvoie un **contrat JSON strict** avec simulation comparative (base Conseil vs arbitrage du joueur) et mises à jour d'état. Le serveur valide/borne ce JSON avant de le renvoyer au client.
 
-La clé `MISTRAL_API_KEY` n'est lue que côté serveur (`src/server.ts`) et n'est jamais envoyée au navigateur. Sans clé valide, la chronique retombe sur le texte brut des événements.
+La clé `MISTRAL_API_KEY` n'est lue que côté serveur (`.env`, gitigné).
 
-## Installation et exécution locale
-
-Depuis un terminal, à partir du dépôt (l'app vit sur la branche `vibe/chat-mistral-web-4bb1a1` de la PR #2, pas encore sur `main`) :
+## Lancer en local
 
 ```bash
 git clone https://github.com/TE-LDA/interface-de-base.git
@@ -17,41 +15,18 @@ npm install
 cp .env.example .env
 npm run dev
 ```
+Ouvrir http://localhost:5173 (prod : `npm run build && npm start` → http://localhost:3000).
 
-Avant le premier `npm run dev`, ouvrez `chat-mistral/.env` dans un éditeur et renseignez `MISTRAL_API_KEY` (clé obtenue sur <https://console.mistral.ai/api-keys/>).
+## Architecture
 
-`npm run dev` lance deux processus : l'API Express (port 3000) et le serveur de dev Vite (port 5173, qui proxifie `/api` vers l'API). Ouvrez ensuite <http://localhost:5173>.
+- **État unique** `GameState` (`client/src/game/types.ts`) : `meta` (tour/an/mois/dynastie/seigneur), `metrics` (trésorerie, revenus/charges mensuels, population, réserve de grain en mois, inquiétude 0-100, prestige), `macro` (6 orientations, niveaux 0-5), `assets[]` (bâtiments = projets fusionnés : niveau 1-3, statut building/active/damaged, revenus et upkeep mensuels), `pendingLetters[]` (courrier), `chronicle[]`.
+- **Moteur à ticks** (`client/src/game/sim.ts`) : 1 tick = 1 mois. Revenus − upkeep, grain, population, inquiétude (révolte > 80 %), événements aléatoires (peste, comètes, brigands, incendie…), successions/dynasties (uchronie), village autonome, lettres du conseil.
+- **Contrat JSON Bailli** (`POST /api/order`, `src/server.ts`) : `{ player_intent, comparative_simulation (baseline vs enacted + tradeoff_summary), state_updates (treasury_change, unrest_change, prestige_change, new_asset_queue), narrative_response }`. Sanitization serveur : parse défensif, bornes (trésorerie min −budget/max +100, unrest & prestige ±15, ticks 1-12, niveau 1-3, revenus 0-50…), enums fermés, fallback propre. Appel en `response_format: json_object`.
+- **UI** : chronique pleine page à gauche ; panneau droit (Vos ordres 🖋️ + suggestions, Trésorerie 💰, Orientations macro 🎯 avec steppers 0-5, Contrôles ⚙️) ; ✉️ courrier (lettre en grand, OUI/NON ou texte libre, rédigée via `POST /api/letter`) ; 📊 **rapport d'impact comparatif** (table Conseil vs arbitrage + variance) à chaque décision ; 🗺️ carte des actifs en overlay.
+- Sauvegarde auto `localStorage`.
 
-## Jouer
+## Fichiers clés
 
-- La partie tourne en boucle (1 tick = 1 mois, 12 ticks = 1 an) : **⏸/▶** pour pause, **vitesse ×1/×2/×4** pour accélérer.
-- **Interface 100 % lettres** : la **Chronique** occupe tout l'écran (style page de livre), et vos ordres se tapent dans la **barre fixe en bas** 🖋️ (open world, texte libre) : « construis une ferme », « donne-moi le devis de la bibliothèque », « va voir mes hommes : améliore l'économie, que me proposez-vous ? ». `mistral-small-latest` joue le maître du jeu : il répond dans la chronique et renvoie une action structurée (JSON). Pour une construction, l'**architecte dresse le devis** (📐 dans la chronique) comparé à vos ressources, et les travaux ne commencent que si le devis est abordable. Vous pouvez aussi **promulguer des lois, décrets, chartes, fonder des ordres religieux/militaires ou promouvoir des hommes** : l'IA fait réagir les habitants (acclamations, murmures, révolte si le moral est bas) et la loi est inscrite dans la liste « 📜 Lois et ordres du royaume » (panneau 🗺️). Les villageois prennent aussi parfois des décisions seuls (pont réparé, marché hebdomadaire, levée refusée…). La carte du domaine et les sciences sont derrière le bouton **🗺️** en haut à droite.
-- **Production** : les fermes 🌾 et moulins 🍞 produisent la nourriture, les 🪓 cabanes de bûcherons produisent le **bois**, les ⛏️ carrières produisent la **pierre**, les ateliers 🔨 transforment bois/pierre en or, les marchés ⚖️ rapportent de l'or selon la population.
-- **Science** 🔬 : scriptorium 📜, bibliothèque 📚 et université 🎓 produisent de la connaissance 📖, à dépenser dans l'arbre de **découvertes** (assollement, horlogerie, médecine, remparts, imprimerie…).
-- **Panneau Trésorerie** 💰 (toujours visible à droite) : or en caisse, revenus estimés/mois, total investi, projets en cours avec rendement et durée restante.
-- **Budget & investissements** 📊 💰 : « investissons 30 pièces d'or dans le culte », « 20 dans la défense »… L'IA crée le projet (culte/commerce/savoir/défense/agriculture/santé), l'or est prélevé sur le budget, et le projet rapporte ~5 %/mois pendant 24 mois (rendement volatile ±30 %, entretien 2 %/mois, risque d'échec, rendements décroissants par catégorie). **À partir de 50 💰 investis, les conseillers déclenchent une stratégie concrète** (marché, chapelle, tour de guet, ferme, scriptorium, médecin…) **avec effets + et −** (ex. commerce : marché créé, mais moral −3). Les projets en cours sont listés dans 🗺️ (📊) et la 💰 Trésorerie.
-- **Tarif adaptatif** 📐 : le devis dépend de la **quantité** demandée (« construis 5 maisons ») et du nombre de bâtiments du même type déjà possédés — chaque exemplaire possédé fait baisser le coût marginal de 10 % (plancher à 50 %). Le client recalcule toujours le coût réel, l'IA ne fait que choisir quoi construire.
-- **Stratégie macro** 🎯 : vous choisissez l'orientation du royaume (équilibre, prospérité, foi, défense, savoir, expansion) avec des bonus passifs. La **tactique et le micro** restent aux villageois et à vos hommes : la simulation décide seule au jour le jour.
-- **Boucle principale = la correspondance** : vous écrivez un ordre/une lettre dans « 🖋️ Vos ordres » → l'IA (maître du jeu + personnages) vous **répond immédiatement**, la réponse apparaît en évidence (vert) dans la chronique, avec les effets appliqués.
-- **Boîte courrier** ✉️ : les lettres du conseil (argumentées, rédigées par l'IA via `POST /api/letter`) arrivent **sans pop-up** — une pastille « ✉️ Courrier (1) » dans le panneau ; cliquez pour lire la lettre **en grand** et arbitrer avec **OUI / NON** ou en texte libre. La simu (uchronie) continue en fond, silencieusement, dans la chronique.
-- **Village autonome** (bouton 🏘️) : le village se développe tout seul — chaque mois, les villageois construisent ce qui manque (nourriture, logements, ressources) s'ils en ont les moyens. Dans le panneau 🗺️, cliquez sur une case herbeuse pour construire à la main.
-- Les événements marquants (famine, peste, guerre, comètes, successions, uchronies) sont racontés dans la **Chronique** par `mistral-small-latest`.
-- La partie est sauvegardée dans `localStorage` : rechargez la page, le royaume continue là où il en était. **Nouvelle chronique** repart de zéro (nouvelle uchronie).
-
-## Mode production
-
-```bash
-npm run build
-npm start
-```
-
-`npm run build` compile le serveur (`dist/`) et le client React (`dist-client/`) ; `npm start` sert le tout sur <http://localhost:3000> (variable `PORT` pour changer le port).
-
-## Structure
-
-- `src/server.ts` — serveur Express : expose `POST /api/chat` et sert le build client (`dist-client/`)
-- `client/src/game/sim.ts` — moteur de simulation (ticks, économie, événements aléatoires)
-- `client/src/game/chronicle.ts` — narration des événements via `/api/chat`
-- `client/src/App.tsx` — interface de jeu (carte du royaume, ressources, chronique)
-- `vite.config.ts` — config Vite (racine `client/`, proxy `/api` en dev)
-- `.env.example` — modèle de configuration (`.env` est ignoré par git)
+- `src/server.ts` — Express : `/api/chat` (narration), `/api/order` (contrat Bailli + sanitization), `/api/letter` (lettres du conseil), statique `dist-client/`
+- `client/src/game/sim.ts` — moteur de ticks
+- `client/src/App.tsx` — interface

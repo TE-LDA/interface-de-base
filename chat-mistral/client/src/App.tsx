@@ -2,51 +2,39 @@ import { useEffect, useRef, useState } from "react";
 import { sendLetter, sendOrder } from "./api";
 import { narrate } from "./game/chronicle";
 import {
-  BUILDING_CATALOG,
+  ASSET_CATALOG,
+  COUNCIL_PROPOSALS,
   GRID_H,
   GRID_W,
-  STRATEGIES,
-  TECHS,
-  ADVISOR_THRESHOLD,
-  DECISIONS,
-  PROJECT_CATS,
-  advisorStrategy,
-  applyDecision,
-  buildingAt,
+  MACRO_LABELS,
+  MONTHS,
+  assetAt,
   createGame,
-  defense,
-  estimateIncome,
-  estimateNet,
-  estimateUpkeep,
   freeTiles,
   housingCap,
-  invest,
-  matchDecision,
-  matchProjectCat,
-  quote,
-  research,
-  seasonOf,
+  levelOf,
   step,
-  unitCost,
+  totalDefense,
 } from "./game/sim";
 import type {
-  BuildingType,
-  ChronicleEntry,
+  Asset,
   GameState,
-  OrderAction,
-  StrategyId,
-  TechId,
+  ImpactReport,
+  Letter,
+  LogEntry,
+  MacroId,
 } from "./game/types";
 
-const SAVE_KEY = "uchronie-royaume-save";
+const SAVE_KEY = "domaine-seigneurial-save";
 const TICK_MS = 450;
 const SPEEDS = [1, 2, 4];
+
 const SUGGESTIONS = [
-  "Construis une ferme",
-  "Quels sont les devis pour une bibliothèque ?",
-  "Améliore l'économie : que me proposez-vous ?",
-  "Promulgue une charte des libertés pour le bourg",
-  "Fonde un ordre militaire pour défendre les frontières",
+  "Construis un quai marchand pour 100 💰",
+  "Négocie à la baisse : fais le port pour 80 💰 avec le bois du domaine",
+  "Surinvestis 200 💰 dans une église pour monter vite en prestige",
+  "Lève la taille sur les paysans",
+  "Impose une corvée pour accélérer les chantiers",
 ];
 
 function load(): GameState | null {
@@ -60,66 +48,28 @@ function load(): GameState | null {
 
 function stateSummary(s: GameState) {
   return {
-    royaume: s.kingdom,
-    maison: s.dynasty,
-    seigneur: s.ruler,
-    an: s.year,
-    saison: seasonOf(s.month),
-    ressources: s.resources,
-    population: s.population,
-    moral: Math.round(s.moral),
-    defense: defense(s),
-    batiments: s.buildings.map((b) =>
-      BUILDING_CATALOG[b.type].name + (b.done ? "" : " (en chantier)")
-    ),
-    decouvertes: s.techs.map((t) => TECHS[t].name),
-    lois_en_vigueur: s.decrets.map((d) => `${d.titre} (an ${d.year})`),
-    demande_en_attente: s.demandeConseil
-      ? `${s.demandeConseil.texte}${s.demandeConseil.titre ? ` — lettre « ${s.demandeConseil.titre} » : ${s.demandeConseil.corps}` : ""}`
-      : null,
-    strategie: STRATEGIES.find((x) => x.id === s.strategy)?.name ?? "Équilibre",
-    budget_or: Math.floor(s.resources.or),
-    projets_actifs: s.projects.map((p) => `${p.emoji} ${p.nom}: ${p.montant} or, encore ${p.moisRestants} mois`),
-    categories_projets: Object.values(PROJECT_CATS).map((c) => `${c.name} (${c.desc})`),
-    decisions_disponibles: Object.entries(DECISIONS).map(([id, d]) => `${id} = ${d.name} : ${d.desc}`),
-    mesures_actives: s.mesures.map((m) => DECISIONS[m]?.name ?? m),
-    buffs_actifs: s.buffs.map((b) => `${b.nom} (${b.moisRestants} mois)`),
-    village_autonome: s.autoDev,
-    batiments_disponibles: (
-      Object.entries(BUILDING_CATALOG) as [BuildingType, (typeof BUILDING_CATALOG)[BuildingType]][]
-    )
-      .filter(([t]) => t !== "château")
-      .map(([t, c]) => `${t} (${c.name}, ${c.desc}) coût: ${JSON.stringify(c.cost)}`),
+    meta: s.meta,
+    metrics: s.metrics,
+    budget: Math.floor(s.metrics.treasury),
+    macro: s.macro,
+    actifs: s.assets.map((a) => `${a.emoji} ${a.name} N${a.level} (${a.status})`),
+    lettres_en_attente: s.pendingLetters.map((l) => l.sujet),
+    catalogue_actifs: Object.entries(ASSET_CATALOG)
+      .filter(([k]) => k !== "château")
+      .map(([k, c]) => `${k} = ${c.name} : coût ~${c.baseCost} 💰, ${c.desc}`),
+    propositions_conseil: COUNCIL_PROPOSALS,
   };
 }
 
 export default function App() {
   const narrated = useRef(new Set<number>());
-  const [state, setState] = useState<GameState>(() => {
-    const saved = load();
-    if (saved) {
-      if (typeof saved.autoDev !== "boolean") saved.autoDev = true;
-      saved.techs = saved.techs ?? [];
-      saved.decrets = saved.decrets ?? [];
-      if (!saved.demandeConseil) saved.demandeConseil = null;
-      if (!saved.strategy) saved.strategy = "equilibre";
-      saved.projects = saved.projects ?? [];
-      if (typeof saved.totalInvesti !== "number") saved.totalInvesti = 0;
-      saved.investiParCat = saved.investiParCat ?? {};
-      if (typeof saved.orDebutAnnee !== "number") saved.orDebutAnnee = Math.round(saved.resources.or);
-      saved.mesures = saved.mesures ?? [];
-      saved.buffs = saved.buffs ?? [];
-      saved.resources.science = saved.resources.science ?? 30;
-      saved.events.forEach((e) => narrated.current.add(e.id));
-    }
-    return saved ?? createGame();
-  });
-  const [chronicle, setChronicle] = useState<ChronicleEntry[]>([]);
-  const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
-  const [showMap, setShowMap] = useState(false);
-  const [showLettre, setShowLettre] = useState(false);
+  const [state, setState] = useState<GameState>(() => load() ?? createGame());
   const [order, setOrder] = useState("");
   const [sending, setSending] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [letterOpen, setLetterOpen] = useState<Letter | null>(null);
+  const [letterBody, setLetterBody] = useState<{ titre: string; corps: string } | null>(null);
+  const [report, setReport] = useState<ImpactReport | null>(null);
   const chronicleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -128,38 +78,27 @@ export default function App() {
       setState((prev) => {
         const next: GameState = {
           ...prev,
-          resources: { ...prev.resources },
-          buildings: prev.buildings.map((b) => ({ ...b })),
-          events: [...prev.events],
-          techs: [...prev.techs],
+          meta: { ...prev.meta },
+          metrics: { ...prev.metrics },
+          macro: { ...prev.macro },
+          assets: prev.assets.map((a) => ({ ...a })),
+          pendingLetters: [...prev.pendingLetters],
+          chronicle: [...prev.chronicle],
         };
         for (const e of step(next)) {
-          next.events.push(e);
+          next.chronicle.push(e);
           if (narrated.current.has(e.id)) continue;
           narrated.current.add(e.id);
           if (e.kind === "info") {
-            setChronicle((c) => [...c, { year: e.year, text: e.text }]);
+            // déjà dans la chronique
           } else {
-            void narrate(next, e).then((text) =>
-              setChronicle((c) => [...c, { year: e.year, text }])
-            );
-          }
-        }
-        if (next.demandeConseil && !narrated.current.has(next.demandeConseil.id)) {
-          narrated.current.add(next.demandeConseil.id);
-          const demande = next.demandeConseil;
-          void sendLetter(demande.texte, stateSummary(next))
-            .then((l) => {
-              setState((s) =>
-                s.demandeConseil && s.demandeConseil.id === demande.id
-                  ? { ...s, demandeConseil: { ...s.demandeConseil, titre: l.titre, corps: l.corps } }
-                  : s
-              );
-              pushChronicle(demande.year, `✉️ Lettre du conseil des anciens — « ${l.titre} » (dans votre courrier ✉️)`);
-            })
-            .catch(() => {
-              pushChronicle(demande.year, `✉️ Le conseil envoie sa demande : ${demande.texte}`);
+            void narrate(next, e).then((text) => {
+              setState((s) => ({
+                ...s,
+                chronicle: s.chronicle.map((c) => (c.id === e.id ? { ...c, text } : c)),
+              }));
             });
+          }
         }
         return next;
       });
@@ -171,353 +110,174 @@ export default function App() {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(state));
     } catch {
-      // stockage indisponible : la partie reste en mémoire
+      // ignore
     }
   }, [state]);
 
   useEffect(() => {
     const el = chronicleRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chronicle.length]);
+  }, [state.chronicle.length]);
 
-  function pushChronicle(year: number, text: string, kind?: "reply" | "event") {
-    setChronicle((c) => [...c, { year, text, kind }]);
+  function pushLog(kind: LogEntry["kind"], text: string) {
+    setState((s) => ({
+      ...s,
+      chronicle: [...s.chronicle, { id: s.nextId++, year: s.meta.year, kind, text }],
+    }));
   }
 
-  function toggleRunning() {
-    setState((s) => ({ ...s, running: !s.running }));
+  async function sendOrderText(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    try {
+      const res = await sendOrder(trimmed, stateSummary(state));
+      pushLog("reply", `🖋️ ${res.narrative_response}`);
+      applyContract(res);
+      if (res.comparative_simulation) setReport(res.comparative_simulation);
+    } catch (err) {
+      pushLog("info", `⚠ Le Bailli n'a pas répondu : ${err instanceof Error ? err.message : "erreur"}`);
+    } finally {
+      setSending(false);
+    }
   }
 
-  function cycleSpeed() {
-    setState((s) => ({ ...s, speed: SPEEDS[(SPEEDS.indexOf(s.speed) + 1) % SPEEDS.length] }));
+  function applyContract(res: Awaited<ReturnType<typeof sendOrder>>) {
+    setState((s) => {
+      const next: GameState = {
+        ...s,
+        meta: { ...s.meta },
+        metrics: { ...s.metrics },
+        assets: s.assets.map((a) => ({ ...a })),
+        pendingLetters: [...s.pendingLetters],
+        chronicle: [...s.chronicle],
+      };
+      const su = res.state_updates;
+      next.metrics.treasury = Math.max(0, Math.round(next.metrics.treasury + su.treasury_change));
+      next.metrics.unrest = Math.max(0, Math.min(100, Math.round(next.metrics.unrest + su.unrest_change)));
+      next.metrics.prestige = Math.max(0, Math.min(100, Math.round(next.metrics.prestige + su.prestige_change)));
+      if (su.new_asset_queue) {
+        const q = su.new_asset_queue;
+        const tiles = freeTiles(next);
+        const cat = ASSET_CATALOG[q.cat ?? "marché"] ? (q.cat ?? "marché") : "marché";
+        const c = ASSET_CATALOG[cat];
+        const t = tiles.length > 0 ? tiles[Math.floor(Math.random() * tiles.length)] : { x: 0, y: 0 };
+        const cost = Math.abs(su.treasury_change);
+        next.assets.push({
+          id: q.id || `asset_${next.nextId++}`,
+          name: q.name || c.name,
+          emoji: q.emoji || c.emoji,
+          cat,
+          level: levelOf(cost || q.level * 50),
+          status: "building",
+          remainingTicks: q.construction_ticks,
+          monthlyRevenue: q.monthly_revenue,
+          monthlyUpkeep: q.monthly_upkeep,
+          foodYield: c.foodYield,
+          prestigeYield: c.prestigeYield,
+          defense: c.defense,
+          x: t.x,
+          y: t.y,
+        });
+        next.chronicle.push({
+          id: next.nextId++,
+          year: next.meta.year,
+          kind: "joy",
+          text: `🏗️ Chantier lancé : ${c.emoji} ${q.name} (niveau ${q.level}) — ${q.construction_ticks} mois, puis +${q.monthly_revenue} 💰/mois, entretien ${q.monthly_upkeep} 💰/mois.`,
+        });
+      }
+      if (letterOpen) {
+        next.pendingLetters = next.pendingLetters.filter((l) => l.id !== letterOpen.id);
+      }
+      return next;
+    });
   }
 
-  function toggleAutoDev() {
-    setState((s) => ({ ...s, autoDev: !s.autoDev }));
+  async function submitOrder(e: React.FormEvent) {
+    e.preventDefault();
+    const t = order.trim();
+    setOrder("");
+    await sendOrderText(t);
+  }
+
+  function answerLetter(accept: boolean) {
+    const l = letterOpen;
+    if (!l) return;
+    setLetterOpen(null);
+    setLetterBody(null);
+    void sendOrderText(
+      accept ? `J'accorde la proposition du conseil : ${l.sujet}` : `Je refuse la proposition du conseil : ${l.sujet}`
+    );
+  }
+
+  async function openLetter(l: Letter) {
+    setLetterOpen(l);
+    setLetterBody(null);
+    try {
+      const res = await sendLetter(l.sujet, stateSummary(state));
+      setLetterBody(res);
+    } catch {
+      setLetterBody({ titre: "Lettre du conseil des anciens", corps: `Proposition : ${l.sujet}` });
+    }
+  }
+
+  function setMacro(id: MacroId, delta: number) {
+    setState((s) => ({
+      ...s,
+      macro: { ...s.macro, [id]: Math.max(0, Math.min(5, s.macro[id] + delta)) },
+    }));
   }
 
   function newGame() {
     narrated.current.clear();
     const g = createGame();
     setState(g);
-    setChronicle([]);
-    setSelected(null);
-    const first = g.events[0];
-    narrated.current.add(first.id);
-    void narrate(g, first).then((text) => setChronicle([{ year: first.year, text }]));
+    pushLogInit(g);
   }
 
-  function place(type: BuildingType) {
-    if (!selected) return;
-    const owned = state.buildings.filter((b) => b.type === type).length;
-    const cost = unitCost(type, owned);
-    const r = state.resources;
-    if (r.bois < cost.bois || r.pierre < cost.pierre || r.or < cost.or) {
-      return;
-    }
-    setState((s) => ({
-      ...s,
-      resources: {
-        ...s.resources,
-        bois: s.resources.bois - cost.bois,
-        pierre: s.resources.pierre - cost.pierre,
-        or: s.resources.or - cost.or,
-      },
-      buildings: [...s.buildings, { type, x: selected.x, y: selected.y, progress: 0, done: false }],
-    }));
-    setSelected(null);
-  }
-
-  function doResearch(id: TechId) {
-    setState((s) => {
-      const next: GameState = {
-        ...s,
-        resources: { ...s.resources },
-        buildings: s.buildings.map((b) => ({ ...b })),
-        events: [...s.events],
-        techs: [...s.techs],
-      };
-      const ev = research(next, id);
-      if (ev) {
-        next.events.push(ev);
-        if (!narrated.current.has(ev.id)) {
-          narrated.current.add(ev.id);
-          void narrate(next, ev).then((text) => pushChronicle(ev.year, text));
-        }
-      }
-      return next;
-    });
-  }
-
-  async function sendOrderText(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || sending) return;
-    const hadDemande = state.demandeConseil;
-    setSending(true);
-    try {
-      const res = await sendOrder(trimmed, stateSummary(state));
-      if (res.reponse) pushChronicle(state.year, `🖋️ ${res.reponse}`, "reply");
-      applyAction(res.action);
-      if (hadDemande) {
-        setState((s) => (s.demandeConseil ? { ...s, demandeConseil: null } : s));
-      }
-    } catch (err) {
-      pushChronicle(
-        state.year,
-        `⚠ Le héraut n'a pas pu porter l'ordre : ${err instanceof Error ? err.message : "erreur inconnue"}`
-      );
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function submitOrder(event: React.FormEvent) {
-    event.preventDefault();
-    const text = order.trim();
-    setOrder("");
-    await sendOrderText(text);
-  }
-
-  function answerLettre(accept: boolean) {
-    setShowLettre(false);
-    const d = state.demandeConseil;
-    if (!d) return;
-    void sendOrderText(
-      accept
-        ? `J'accorde la proposition du conseil : ${d.texte}`
-        : `Je refuse la proposition du conseil : ${d.texte}`
+  function pushLogInit(g: GameState) {
+    void narrate(g, { id: 0, year: g.meta.year, kind: "joy", text: `Le domaine de ${g.meta.rulerTitle} commence son histoire (maison ${g.meta.dynastyName}).` }).then((text) =>
+      setState((s) => ({ ...s, chronicle: [{ id: s.nextId++, year: s.meta.year, kind: "joy", text }] }))
     );
   }
 
-  function applyEffets(s: GameState, e: Record<string, number> | undefined) {
-    if (!e) return;
-    const clamp = (v: number, max: number) => Math.max(-max, Math.min(max, Math.round(v)));
-    const r = s.resources;
-    r.nourriture = Math.max(0, Math.min(500, r.nourriture + clamp(e.nourriture ?? 0, 20)));
-    r.bois = Math.max(0, Math.min(999, r.bois + clamp(e.bois ?? 0, 20)));
-    r.pierre = Math.max(0, Math.min(999, r.pierre + clamp(e.pierre ?? 0, 20)));
-    r.or = Math.max(0, Math.min(999, r.or + clamp(e.or ?? 0, 20)));
-    r.foi = Math.max(0, Math.min(100, r.foi + clamp(e.foi ?? 0, 15)));
-    r.science = Math.max(0, Math.min(999, r.science + clamp(e.science ?? 0, 20)));
-    s.moral = Math.max(0, Math.min(100, s.moral + clamp(e.moral ?? 0, 15)));
-    s.population = Math.max(0, s.population + clamp(e.pop ?? 0, 6));
-  }
-
-  function setStrategy(id: StrategyId) {
-    setState((s) => {
-      if (s.strategy === id) return s;
-      const next: GameState = { ...s, strategy: id, events: [...s.events] };
-      const ev = {
-        id: next.nextEventId++,
-        year: next.year,
-        kind: "info" as const,
-        text: `🎯 Le seigneur adopte la stratégie « ${STRATEGIES.find((x) => x.id === id)?.name ?? id} » (macro). La tactique et le micro restent aux hommes et aux villageois.`,
-      };
-      next.events.push(ev);
-      if (!narrated.current.has(ev.id)) {
-        narrated.current.add(ev.id);
-        pushChronicle(ev.year, ev.text);
-      }
-      return next;
-    });
-  }
-
-  function applyAction(action: OrderAction | undefined) {
-    if (!action) return;
-    if (action.type === "build" && action.batiment) {
-      const key = (Object.keys(BUILDING_CATALOG) as BuildingType[]).find(
-        (t) =>
-          t === action.batiment ||
-          BUILDING_CATALOG[t].name.toLowerCase() === action.batiment!.toLowerCase()
-      );
-      if (!key) return;
-      const cat = BUILDING_CATALOG[key];
-      const q = Math.max(1, Math.min(12, Math.floor(action.quantite ?? 1)));
-      const owned = state.buildings.filter((b) => b.type === key).length;
-      const total = quote(key, owned, q);
-      const r = state.resources;
-      const missing = {
-        bois: Math.max(0, total.bois - Math.floor(r.bois)),
-        pierre: Math.max(0, total.pierre - Math.floor(r.pierre)),
-        or: Math.max(0, total.or - Math.floor(r.or)),
-      };
-      const afford = missing.bois === 0 && missing.pierre === 0 && missing.or === 0;
-      pushChronicle(
-        state.year,
-        `📐 Devis de l'architecte — ${cat.emoji} ${cat.name}${q > 1 ? ` ×${q}` : ""} : 🪵${total.bois} 🪨${total.pierre} 💰${total.or} (tarif dégressif, ${owned} déjà possédé${owned > 1 ? "s" : ""}) | vos ressources : 🪵${Math.floor(r.bois)} 🪨${Math.floor(r.pierre)} 💰${Math.floor(r.or)} → ${
-          afford ? "✅ abordable, les travaux commencent" : `❌ insuffisant (il manque 🪵${missing.bois} 🪨${missing.pierre} 💰${missing.or})`
-        }.`
-      );
-      if (!afford) return;
-      setState((s) => {
-        const tiles = freeTiles(s);
-        const placed = Math.min(q, tiles.length);
-        if (placed === 0) return s;
-        const cost = quote(key, s.buildings.filter((b) => b.type === key).length, placed);
-        const next: GameState = {
-          ...s,
-          resources: {
-            ...s.resources,
-            bois: s.resources.bois - cost.bois,
-            pierre: s.resources.pierre - cost.pierre,
-            or: s.resources.or - cost.or,
-          },
-          buildings: [...s.buildings],
-          events: [...s.events],
-        };
-        for (let i = 0; i < placed; i++) {
-          const t = tiles[Math.floor(Math.random() * tiles.length)];
-          next.buildings.push({ type: key, x: t.x, y: t.y, progress: 0, done: false });
-          tiles.splice(tiles.indexOf(t), 1);
-        }
-        const ev = {
-          id: next.nextEventId++,
-          year: next.year,
-          kind: "joy" as const,
-          text: `Par ordre du seigneur, on bâtit ${placed > 1 ? `${placed} ${cat.name.toLowerCase()}s` : `une ${cat.name.toLowerCase()}`}.`,
-        };
-        next.events.push(ev);
-        if (!narrated.current.has(ev.id)) {
-          narrated.current.add(ev.id);
-          void narrate(next, ev).then((text) => pushChronicle(ev.year, text));
-        }
-        return next;
-      });
-    } else if (action.type === "invest") {
-      const cat = matchProjectCat(action.projet ?? "commerce");
-      setState((s) => {
-        const next: GameState = {
-          ...s,
-          resources: { ...s.resources },
-          buildings: s.buildings.map((b) => ({ ...b })),
-          projects: [...s.projects],
-          events: [...s.events],
-          investiParCat: { ...s.investiParCat },
-        };
-        const demande = Math.floor(action.montant ?? 0);
-        const ev = invest(next, cat, demande);
-        if (!ev) return s;
-        const investi = Math.max(1, Math.min(demande, Math.floor(s.resources.or)));
-        next.events.push(ev);
-        if (!narrated.current.has(ev.id)) {
-          narrated.current.add(ev.id);
-          pushChronicle(ev.year, ev.text);
-        }
-        if (investi >= ADVISOR_THRESHOLD) {
-          const strat = advisorStrategy(cat);
-          if (strat) {
-            applyEffets(next, strat.effets);
-            if (strat.building) {
-              const tiles = freeTiles(next);
-              if (tiles.length > 0) {
-                const t = tiles[Math.floor(Math.random() * tiles.length)];
-                next.buildings.push({ type: strat.building, x: t.x, y: t.y, progress: 1, done: true });
-              }
-            }
-            const ev2 = {
-              id: next.nextEventId++,
-              year: next.year,
-              kind: strat.kind,
-              text: strat.text,
-            };
-            next.events.push(ev2);
-            if (!narrated.current.has(ev2.id)) {
-              narrated.current.add(ev2.id);
-              void narrate(next, ev2).then((text) => pushChronicle(ev2.year, text));
-            }
-          }
-        }
-        return next;
-      });
-    } else if (action.type === "mesure") {
-      const id = matchDecision(action.mesure ?? "");
-      if (!id || !DECISIONS[id]) return;
-      setState((s) => {
-        const next: GameState = {
-          ...s,
-          resources: { ...s.resources },
-          buildings: s.buildings.map((b) => ({ ...b })),
-          events: [...s.events],
-          mesures: [...s.mesures],
-          buffs: [...s.buffs],
-        };
-        const ev = applyDecision(next, id);
-        if (!ev) return s;
-        next.events.push(ev);
-        if (!narrated.current.has(ev.id)) {
-          narrated.current.add(ev.id);
-          if (ev.kind === "info") pushChronicle(ev.year, ev.text);
-          else void narrate(next, ev).then((t) => pushChronicle(ev.year, t));
-        }
-        return next;
-      });
-    } else if (action.type === "decret") {
-      setState((s) => {
-        const next: GameState = {
-          ...s,
-          resources: { ...s.resources },
-          decrets: [...s.decrets],
-        };
-        if (action.titre) {
-          next.decrets.push({
-            id: next.nextEventId++,
-            year: next.year,
-            titre: action.titre.slice(0, 120),
-            texte: (action.texte ?? "").slice(0, 500),
-          });
-        }
-        applyEffets(next, action.effets);
-        return next;
-      });
-    } else if (action.type === "ressources") {
-      setState((s) => {
-        const next: GameState = { ...s, resources: { ...s.resources } };
-        applyEffets(next, action.effets);
-        return next;
-      });
-    }
-  }
-
-  const selectedBuilding = selected ? buildingAt(state, selected.x, selected.y) : undefined;
-  const r = state.resources;
+  const m = state.metrics;
+  const net = m.monthlyIncome - m.monthlyUpkeep;
+  const unread = state.pendingLetters.length;
 
   return (
     <div className="app">
       <header className="topbar">
-        <h1>🏰 {state.kingdom}</h1>
+        <h1>🏰 {state.meta.rulerTitle}</h1>
         <div className="subtitle">
-          Maison {state.dynasty} — {state.ruler} — An {state.year} — {seasonOf(state.month)}
+          Maison {state.meta.dynastyName} — An {state.meta.year} — {state.meta.month} — Tour {state.meta.turn}
         </div>
         <div className="resources">
-          <span className="chip">🍞 {Math.round(r.nourriture)}</span>
-          <span className="chip">👥 {state.population}/{housingCap(state)}</span>
-          <span className="chip">🪵 {Math.round(r.bois)}</span>
-          <span className="chip">🪨 {Math.round(r.pierre)}</span>
-          <span className="chip">💰 {Math.round(r.or)}</span>
-          <span className="chip">⛪ {Math.round(r.foi)}</span>
-          <span className="chip">📖 {Math.round(r.science)}</span>
-          <span className="chip">😊 {Math.round(state.moral)}</span>
-          <span className="chip">🛡️ {defense(state)}</span>
+          <span className="chip">💰 {Math.round(m.treasury)}</span>
+          <span className="chip">📈 {net >= 0 ? "+" : ""}{net}/mois</span>
+          <span className="chip">👥 {m.population}/{housingCap(state)}</span>
+          <span className="chip">🌾 {m.foodReserve} mois</span>
+          <span className="chip">😠 {Math.round(m.unrest)} %</span>
+          <span className="chip">🏅 {Math.round(m.prestige)}</span>
+          <span className="chip">🛡️ {totalDefense(state)}</span>
         </div>
         <div className="controls">
-          <button type="button" onClick={() => setShowMap(true)} title="Carte du domaine, lois et sciences">
-            🗺️ Domaine
-          </button>
+          <button type="button" onClick={() => setShowMap(true)} title="Carte des actifs, lois">🗺️ Domaine</button>
         </div>
       </header>
 
       <div className="layout">
         <main className="page">
           <div className="chronicle" ref={chronicleRef}>
-            <h2>📜 Chronique du royaume de {state.kingdom}</h2>
-            {chronicle.length === 0 && (
+            <h2>📜 Chronique du domaine</h2>
+            {state.chronicle.length === 0 && (
               <p className="empty">
-                Vous êtes le seigneur de {state.kingdom}. Le royaume vit tout seul, tick par tick.
-                Écrivez vos ordres dans le panneau de droite pour agir, ou laissez l'uchronie se dérouler…
+                Le domaine de {state.meta.rulerTitle} s'éveille. Le monde avance tout seul ;
+                écrivez vos ordres à droite pour agir.
               </p>
             )}
-            {chronicle.map((c, i) => (
-              <p key={i} className={c.kind === "reply" ? "reply" : undefined}>
+            {state.chronicle.map((c) => (
+              <p key={c.id} className={c.kind === "reply" ? "reply" : undefined}>
                 <strong>An {c.year}</strong> — {c.text}
               </p>
             ))}
@@ -526,28 +286,23 @@ export default function App() {
 
         <aside className="panel">
           <form className="card orders" onSubmit={submitOrder}>
-            <h2>🖋️ Vos ordres</h2>
-            {state.demandeConseil &&
-              (state.demandeConseil.corps ? (
-                <button type="button" className="courrier-btn" onClick={() => setShowLettre(true)}>
-                  ✉️ Courrier du conseil <span className="badge">1</span>
-                  <small>« {state.demandeConseil.titre ?? state.demandeConseil.texte} » — cliquez pour lire en grand et arbitrer (OUI / NON)</small>
-                </button>
-              ) : (
-                <div className="demande-banner">
-                  🙇 Le conseil délibère et rédige sa lettre… (« {state.demandeConseil.texte} »)
-                </div>
-              ))}
+            <h2>🖋️ Ordres du seigneur</h2>
+            {unread > 0 && (
+              <button type="button" className="courrier-btn" onClick={() => void openLetter(state.pendingLetters[0])}>
+                ✉️ Courrier du conseil <span className="badge">{unread}</span>
+                <small>« {state.pendingLetters[0].sujet} » — cliquez pour lire et arbitrer (OUI / NON)</small>
+              </button>
+            )}
             <input
               type="text"
               value={order}
               onChange={(e) => setOrder(e.target.value)}
-              placeholder="Écrivez votre ordre ici… (Entrée ⏎ pour envoyer)"
+              placeholder="Écrivez votre ordre… (Entrée ⏎ pour envoyer)"
               disabled={sending}
               autoFocus
             />
             <button type="submit" className="send" disabled={sending || !order.trim()}>
-              {sending ? "Le héraut part…" : "Envoyer l'ordre ➤"}
+              {sending ? "Le Bailli réfléchit…" : "Envoyer l'ordre ➤"}
             </button>
             <div className="suggestions">
               {SUGGESTIONS.map((s) => (
@@ -561,92 +316,106 @@ export default function App() {
           <div className="card budget-card">
             <h2>💰 Trésorerie</h2>
             <div className="budget-or">
-              {Math.round(r.or)} <small>pièces d'or</small>
+              {Math.round(m.treasury)} <small>💰</small>
             </div>
             <div className="budget-income">
-              + ~{estimateIncome(state)} or/mois de revenus · − {estimateUpkeep(state)} d'entretien → net{" "}
-              {estimateNet(state) >= 0 ? "+" : ""}
-              {estimateNet(state)} or/mois
+              + {m.monthlyIncome} 💰/mois de revenus · − {m.monthlyUpkeep} d'entretien → net {net >= 0 ? "+" : ""}
+              {net} 💰/mois
             </div>
-            <div className="budget-total">Investi depuis le début : {state.totalInvesti} 💰</div>
-            {state.projects.length === 0 ? (
-              <p className="budget-hint">
-                Aucun projet en cours — dites par ex. « investissons 20 pièces d'or dans le commerce ».
-              </p>
-            ) : (
-              <ul className="budget-projects">
-                {state.projects.map((p) => (
-                  <li key={p.id}>
-                    {p.emoji} {p.nom} N{p.niveau} — {p.montant} 💰 →{" "}
-                    {p.actif ? `+${p.yield}/mois permanent` : `chantier (${p.moisRestants} mois restants)`}
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           <div className="card strategy-card">
-            <h2>🎯 Stratégie (macro)</h2>
-            <p className="strategy-hint">
-              Vous fixez la stratégie. La tactique et le micro, ce sont vos hommes et les villageois qui les mènent.
-            </p>
-            {STRATEGIES.map((st) => (
-              <button
-                key={st.id}
-                type="button"
-                className={`strategy-btn${state.strategy === st.id ? " active" : ""}`}
-                title={st.desc}
-                onClick={() => setStrategy(st.id)}
-              >
-                {st.emoji} {st.name}
-              </button>
+            <h2>🎯 Orientations macro</h2>
+            <p className="strategy-hint">Vous fixez l'orientation (niveaux 0-5) ; la tactique et le micro sont au Bailli, aux hommes et aux villageois.</p>
+            {(Object.keys(MACRO_LABELS) as MacroId[]).map((id) => (
+              <div className="macro-row" key={id}>
+                <span title={MACRO_LABELS[id].desc}>
+                  {MACRO_LABELS[id].emoji} {MACRO_LABELS[id].name}
+                </span>
+                <span className="macro-ctrl">
+                  <button type="button" onClick={() => setMacro(id, -1)} disabled={state.macro[id] <= 0}>
+                    −
+                  </button>
+                  <b>{state.macro[id]}</b>
+                  <button type="button" onClick={() => setMacro(id, 1)} disabled={state.macro[id] >= 5}>
+                    +
+                  </button>
+                </span>
+              </div>
             ))}
           </div>
 
           <div className="card controls-card">
-            <h2>⚙️ Le royaume</h2>
-            <button type="button" onClick={toggleRunning}>
+            <h2>⚙️ Le domaine</h2>
+            <button type="button" onClick={() => setState((s) => ({ ...s, running: !s.running }))}>
               {state.running ? "⏸ Mettre en pause" : "▶ Reprendre"}
             </button>
-            <button type="button" onClick={cycleSpeed}>
+            <button type="button" onClick={() => setState((s) => ({ ...s, speed: SPEEDS[(SPEEDS.indexOf(s.speed) + 1) % SPEEDS.length] }))}>
               Vitesse de simulation : ×{state.speed}
             </button>
-            <button type="button" onClick={toggleAutoDev} aria-pressed={state.autoDev}>
+            <button type="button" onClick={() => setState((s) => ({ ...s, autoDev: !s.autoDev }))} aria-pressed={state.autoDev}>
               🏘️ Village autonome : {state.autoDev ? "oui" : "non"}
             </button>
             <button type="button" onClick={newGame}>
               ✨ Nouvelle chronique (recommencer)
             </button>
-            <p className="lois-count">
-              📜 {state.decrets.length} loi(s) en vigueur · 📊 {state.projects.length} projet(s) en cours — voir dans 🗺️ Domaine
-            </p>
           </div>
         </aside>
       </div>
 
-      {showLettre && state.demandeConseil?.corps && (
-        <div className="overlay" onClick={() => setShowLettre(false)}>
+      {letterOpen && (
+        <div className="overlay" onClick={() => { setLetterOpen(null); setLetterBody(null); }}>
           <div className="letter-modal" onClick={(e) => e.stopPropagation()}>
             <div className="letter-paper">
               <div className="letter-paper-head">
-                ✉️ Conseil des anciens du royaume de {state.kingdom}
-                <span className="seal">🔴</span>
+                ✉️ Conseil des anciens <span className="seal">🔴</span>
               </div>
-              <h2>{state.demandeConseil.titre ?? "Lettre du conseil"}</h2>
-              <p className="letter-subject">Proposition soumise : {state.demandeConseil.texte}</p>
-              <p className="letter-body">{state.demandeConseil.corps}</p>
+              <h2>{letterBody?.titre ?? "Lettre du conseil"}</h2>
+              <p className="letter-subject">Proposition : {letterOpen.sujet}</p>
+              <p className="letter-body">{letterBody?.corps ?? "Rédaction en cours…"}</p>
             </div>
             <div className="letter-actions">
-              <button type="button" className="oui" onClick={() => answerLettre(true)}>
-                ✅ OUI — j'accorde
-              </button>
-              <button type="button" className="non" onClick={() => answerLettre(false)}>
-                ❌ NON — je refuse
-              </button>
+              <button type="button" className="oui" onClick={() => answerLetter(true)}>✅ OUI — j'accorde</button>
+              <button type="button" className="non" onClick={() => answerLetter(false)}>❌ NON — je refuse</button>
             </div>
-            <p className="letter-alt">
-              …ou écrivez votre arbitrage en texte libre dans le panneau « Vos ordres » (ex. : « plutôt une foire »).
-            </p>
+            <p className="letter-alt">…ou répondez en texte libre dans « Vos ordres ».</p>
+          </div>
+        </div>
+      )}
+
+      {report && (
+        <div className="overlay" onClick={() => setReport(null)}>
+          <div className="report-modal card" onClick={(e) => e.stopPropagation()}>
+            <div className="overlay-head">
+              <h2>📊 Rapport d'impact comparatif</h2>
+              <button type="button" onClick={() => setReport(null)}>✕ Fermer</button>
+            </div>
+            <table className="impact-table">
+              <thead>
+                <tr>
+                  <th>Indicateur</th>
+                  <th>Conseil (base)</th>
+                  <th>Votre arbitrage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.keys(report.baseline).map((k) => (
+                  <tr key={k}>
+                    <td>{k}</td>
+                    <td>{report.baseline[k]}</td>
+                    <td>{report.enacted[k] ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <h3>Variance / notes</h3>
+            <ul className="tradeoffs">
+              {report.tradeoff_summary.map((r, i) => (
+                <li key={i}>
+                  <strong>{r.metric}</strong> : impact {r.impact} — <em>{r.delta}</em>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
@@ -655,135 +424,39 @@ export default function App() {
         <div className="overlay" onClick={() => setShowMap(false)}>
           <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
             <div className="overlay-head">
-              <h2>🗺️ Domaine de {state.kingdom}</h2>
-              <button type="button" onClick={() => setShowMap(false)}>
-                ✕ Fermer
-              </button>
+              <h2>🗺️ Domaine — {state.assets.length} actif(s)</h2>
+              <button type="button" onClick={() => setShowMap(false)}>✕ Fermer</button>
             </div>
             <div className="map">
               {Array.from({ length: GRID_H }, (_, y) =>
                 Array.from({ length: GRID_W }, (_, x) => {
-                  const b = buildingAt(state, x, y);
-                  const isSelected = selected?.x === x && selected?.y === y;
+                  const a = assetAt(state, x, y);
                   return (
-                    <button
-                      key={`${x}-${y}`}
-                      type="button"
-                      className={`tile${b ? " built" : ""}${isSelected ? " selected" : ""}`}
-                      onClick={() => setSelected(b ? null : { x, y })}
-                    >
-                      {b ? (
+                    <div key={`${x}-${y}`} className={`tile${a ? " built" : ""}${a?.status === "damaged" ? " damaged" : ""}`} title={a ? `${a.emoji} ${a.name} N${a.level} — ${a.status === "building" ? `chantier ${a.remainingTicks} mois` : `+${a.monthlyRevenue} 💰/mois, −${a.monthlyUpkeep} entretien`}` : ""}>
+                      {a ? (
                         <>
-                          <span className="emoji">{BUILDING_CATALOG[b.type].emoji}</span>
-                          {!b.done && (
-                            <span className="progress">
-                              <span style={{ width: `${Math.round(b.progress * 100)}%` }} />
-                            </span>
+                          <span className="emoji">{a.emoji}</span>
+                          {a.status === "building" && (
+                            <span className="progress"><span style={{ width: `${Math.round(((1 - a.remainingTicks / Math.max(1, a.remainingTicks + 1)) ) * 100)}%` }} /></span>
                           )}
                         </>
                       ) : (
                         <span className="grass">🌿</span>
                       )}
-                    </button>
+                    </div>
                   );
                 })
               )}
             </div>
-            {selected && !selectedBuilding && (
-              <div className="palette">
-                <h3>Construire en ({selected.x + 1}, {selected.y + 1})</h3>
-                <div className="palette-grid">
-                  {(
-                    Object.entries(BUILDING_CATALOG) as [
-                      BuildingType,
-                      (typeof BUILDING_CATALOG)[BuildingType],
-                    ][]
-                  )
-                    .filter(([t]) => t !== "château")
-                    .map(([t, cat]) => {
-                      const owned = state.buildings.filter((b) => b.type === t).length;
-                      const cost = unitCost(t, owned);
-                      const affordable =
-                        r.bois >= cost.bois && r.pierre >= cost.pierre && r.or >= cost.or;
-                      return (
-                        <button
-                          key={t}
-                          type="button"
-                          className="build-btn"
-                          disabled={!affordable}
-                          title={`${cat.desc} — tarif actuel dégressif (${owned} possédé${owned > 1 ? "s" : ""})`}
-                          onClick={() => place(t)}
-                        >
-                          <span>{cat.emoji}</span> {cat.name}
-                          <small>
-                            {cost.bois ? ` 🪵${cost.bois}` : ""}
-                            {cost.pierre ? ` 🪨${cost.pierre}` : ""}
-                            {cost.or ? ` 💰${cost.or}` : ""}
-                          </small>
-                        </button>
-                      );
-                    })}
+            <div className="projects">
+              <h3>📊 Actifs en cours</h3>
+              {state.assets.filter((a) => a.cat !== "château").map((a) => (
+                <div className="tech" key={a.id}>
+                  <span>
+                    {a.emoji} {a.name} N{a.level} <small>{a.status === "building" ? `chantier : ${a.remainingTicks} mois` : a.status === "damaged" ? "endommagé — à réparer" : `+${a.monthlyRevenue} 💰/mois, entretien ${a.monthlyUpkeep}`}</small>
+                  </span>
                 </div>
-              </div>
-            )}
-            {(state.mesures.length > 0 || state.buffs.length > 0) && (
-              <div className="decrets">
-                <h3>⚖️ Mesures en vigueur</h3>
-                {state.mesures.map((m) => (
-                  <p key={m}>
-                    {DECISIONS[m]?.emoji} {DECISIONS[m]?.name ?? m}
-                  </p>
-                ))}
-                {state.buffs.map((b) => (
-                  <p key={b.id}>
-                    ⏳ {b.nom} — encore {b.moisRestants} mois
-                  </p>
-                ))}
-              </div>
-            )}
-            {state.decrets.length > 0 && (
-              <div className="decrets">
-                <h3>📜 Lois et ordres du royaume</h3>
-                {[...state.decrets].reverse().map((d) => (
-                  <p key={d.id}>
-                    <strong>
-                      An {d.year} — {d.titre}
-                    </strong>
-                    {d.texte ? ` : ${d.texte}` : ""}
-                  </p>
-                ))}
-              </div>
-            )}
-            {state.projects.length > 0 && (
-              <div className="projects">
-                <h3>📊 Projets en cours ({state.projects.length}) — budget 💰 {Math.round(r.or)}</h3>
-                {state.projects.map((p) => (
-                  <div className="tech" key={p.id}>
-                    <span>
-                      {p.emoji} {p.nom} N{p.niveau} <small>{p.montant} 💰 investis (an {p.year}) — {p.actif ? `+${p.yield}/mois permanent, entretien ${p.upkeep} or/mois` : `chantier : encore ${p.moisRestants} mois`}</small>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="research">
-              <h3>🔬 Sciences — 📖 {Math.round(r.science)}</h3>
-              {(Object.entries(TECHS) as [TechId, (typeof TECHS)[TechId]][])
-                .map(([id, t]) => ({ id, t, owned: state.techs.includes(id) }))
-                .map(({ id, t, owned }) => (
-                  <div className="tech" key={id}>
-                    <span>
-                      {t.emoji} {t.name} <small>{t.desc}</small>
-                    </span>
-                    {owned ? (
-                      <em>acquise</em>
-                    ) : (
-                      <button type="button" disabled={r.science < t.cost} onClick={() => doResearch(id)}>
-                        Rechercher ({t.cost} 📖)
-                      </button>
-                    )}
-                  </div>
-                ))}
+              ))}
             </div>
           </div>
         </div>

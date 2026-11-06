@@ -850,3 +850,24 @@ button:disabled {
   font-variant: small-caps;
   white-space: nowrap;
 }
+
+.budget-banner {
+  background: #fbe4d4;
+  border: 1px solid #8a3a2a;
+  color: #7c3524;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+.budget-card.pulse {
+  outline: 3px solid var(--or-clair);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(60, 40, 10, 0.3); }
+  50% { box-shadow: 0 0 22px rgba(212, 160, 23, 0.75); }
+}

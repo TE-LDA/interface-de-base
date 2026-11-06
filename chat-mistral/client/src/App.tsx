@@ -76,10 +76,12 @@ export default function App() {
   const [report, setReport] = useState<ImpactReport | null>(null);
   const [alloc, setAlloc] = useState({ grain: 0, defense: 0, social: 0, prestige: 0, invest: 0 });
   const [investCat, setInvestCat] = useState("port");
+  const [budgetLock, setBudgetLock] = useState(true);
+  const [awaitingBudget, setAwaitingBudget] = useState(false);
   const chronicleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!state.running) return;
+    if (!state.running || awaitingBudget) return;
     const id = setInterval(() => {
       setState((prev) => {
         const next: GameState = {
@@ -105,11 +107,12 @@ export default function App() {
             });
           }
         }
+        if (budgetLock && next.meta.month !== prev.meta.month) setAwaitingBudget(true);
         return next;
       });
     }, TICK_MS / state.speed);
     return () => clearInterval(id);
-  }, [state.running, state.speed]);
+  }, [state.running, state.speed, awaitingBudget, budgetLock]);
 
   useEffect(() => {
     try {
@@ -242,6 +245,7 @@ export default function App() {
   function validateBudget() {
     const total = alloc.grain + alloc.defense + alloc.social + alloc.prestige + alloc.invest;
     if (total <= 0 || total > state.metrics.treasury) return;
+    setAwaitingBudget(false);
     const a = { ...alloc };
     const cat = investCat;
     setAlloc({ grain: 0, defense: 0, social: 0, prestige: 0, invest: 0 });
@@ -365,36 +369,11 @@ export default function App() {
         </main>
 
         <aside className="panel">
-          <form className="card orders" onSubmit={submitOrder}>
-            <h2>🖋️ Ordres du seigneur</h2>
-            {unread > 0 && (
-              <button type="button" className="courrier-btn" onClick={() => void openLetter(state.pendingLetters[0])}>
-                ✉️ Courrier du conseil <span className="badge">{unread}</span>
-                <small>« {state.pendingLetters[0].sujet} » — cliquez pour lire et arbitrer (OUI / NON)</small>
-              </button>
+          <div className={`card budget-card${awaitingBudget ? " pulse" : ""}`}>
+            <h2>💰 Budget du mois — {state.meta.month}</h2>
+            {awaitingBudget && (
+              <div className="budget-banner">💰 Le mois de {state.meta.month} attend votre budget : allouez la caisse puis validez.</div>
             )}
-            <input
-              type="text"
-              value={order}
-              onChange={(e) => setOrder(e.target.value)}
-              placeholder="Écrivez votre ordre… (Entrée ⏎ pour envoyer)"
-              disabled={sending}
-              autoFocus
-            />
-            <button type="submit" className="send" disabled={sending || !order.trim()}>
-              {sending ? "Le Bailli réfléchit…" : "Envoyer l'ordre ➤"}
-            </button>
-            <div className="suggestions">
-              {SUGGESTIONS.map((s) => (
-                <button key={s} type="button" className="suggestion" onClick={() => setOrder(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </form>
-
-          <div className="card budget-card">
-            <h2>💰 Budget du mois</h2>
             <div className="budget-or">
               {Math.round(m.treasury)} <small>💰 en caisse</small>
             </div>
@@ -444,6 +423,34 @@ export default function App() {
             </button>
           </div>
 
+          <form className="card orders" onSubmit={submitOrder}>
+            <h2>🖋️ Ordres du seigneur</h2>
+            {unread > 0 && (
+              <button type="button" className="courrier-btn" onClick={() => void openLetter(state.pendingLetters[0])}>
+                ✉️ Courrier du conseil <span className="badge">{unread}</span>
+                <small>« {state.pendingLetters[0].sujet} » — cliquez pour lire et arbitrer (OUI / NON)</small>
+              </button>
+            )}
+            <input
+              type="text"
+              value={order}
+              onChange={(e) => setOrder(e.target.value)}
+              placeholder="Écrivez votre ordre… (Entrée ⏎ pour envoyer)"
+              disabled={sending}
+              autoFocus
+            />
+            <button type="submit" className="send" disabled={sending || !order.trim()}>
+              {sending ? "Le Bailli réfléchit…" : "Envoyer l'ordre ➤"}
+            </button>
+            <div className="suggestions">
+              {SUGGESTIONS.map((s) => (
+                <button key={s} type="button" className="suggestion" onClick={() => setOrder(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </form>
+
           <div className="card strategy-card">
             <h2>🎯 Orientations macro</h2>
             {MACRO_IDS.map((id) => (
@@ -467,6 +474,15 @@ export default function App() {
             </button>
             <button type="button" onClick={() => setState((s) => ({ ...s, autoDev: !s.autoDev }))} aria-pressed={state.autoDev}>
               🏘️ Village autonome : {state.autoDev ? "oui" : "non"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBudgetLock((b) => !b);
+                setAwaitingBudget(false);
+              }}
+            >
+              🧾 Budget mensuel obligatoire : {budgetLock ? "oui" : "non"}
             </button>
             <button type="button" onClick={newGame}>✨ Nouvelle chronique</button>
           </div>

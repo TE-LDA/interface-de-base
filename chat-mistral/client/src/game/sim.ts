@@ -59,6 +59,7 @@ export function createGame(): GameState {
     ],
     pendingLetters: [],
     chronicle: [],
+    buffs: [],
     running: true,
     speed: 1,
     autoDev: true,
@@ -86,7 +87,8 @@ export function freeTiles(s: GameState): { x: number; y: number }[] {
 export function totalDefense(s: GameState): number {
   return (
     s.assets.filter((a) => a.status === "active").reduce((a, x) => a + x.defense, 0) +
-    s.macro.defense
+    s.macro.defense +
+    s.buffs.reduce((a, b) => a + (b.defense ?? 0), 0)
   );
 }
 
@@ -256,6 +258,11 @@ export function step(s: GameState): LogEntry[] {
     m.treasury = Math.max(0, m.treasury - 20);
     m.unrest = 50;
     events.push(mk(s, "danger", `Révolte paysanne ! -5 âmes, -20 💰 de dégâts. Le seigneur doit calmer le peuple.`));
+  }
+
+  for (let i = s.buffs.length - 1; i >= 0; i--) {
+    s.buffs[i].moisRestants -= 1;
+    if (s.buffs[i].moisRestants <= 0) s.buffs.splice(i, 1);
   }
 
   const auto = autoDevelop(s);

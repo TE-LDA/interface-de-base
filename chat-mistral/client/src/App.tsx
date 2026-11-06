@@ -4,11 +4,6 @@ import { narrate } from "./game/chronicle";
 import {
   ASSET_CATALOG,
   COUNCIL_PROPOSALS,
-  GRID_H,
-  GRID_W,
-  MACRO_LABELS,
-  MONTHS,
-  assetAt,
   createGame,
   freeTiles,
   housingCap,
@@ -16,14 +11,7 @@ import {
   step,
   totalDefense,
 } from "./game/sim";
-import type {
-  Asset,
-  GameState,
-  ImpactReport,
-  Letter,
-  LogEntry,
-  MacroId,
-} from "./game/types";
+import type { GameState, ImpactReport, Letter, LogEntry, MacroId } from "./game/types";
 
 const SAVE_KEY = "domaine-seigneurial-save";
 const TICK_MS = 450;
@@ -36,6 +24,15 @@ const SUGGESTIONS = [
   "Lève la taille sur les paysans",
   "Impose une corvée pour accélérer les chantiers",
 ];
+
+const BUDGET_POSTES: { key: "grain" | "defense" | "social" | "prestige"; emoji: string; label: string; hint: string }[] = [
+  { key: "grain", emoji: "🌾", label: "Réserve de grain", hint: "+3 grain par 💰 (anti-famine)" },
+  { key: "defense", emoji: "🛡️", label: "Défense / milice", hint: "+1 défense le mois (par 10 💰)" },
+  { key: "social", emoji: "😊", label: "Fêtes et social", hint: "−0,4 inquiétude par 💰" },
+  { key: "prestige", emoji: "🏅", label: "Mécénat / prestige", hint: "+0,3 prestige par 💰" },
+];
+
+const MACRO_IDS = Object.keys({ prosperity: 0, faith: 0, defense: 0, knowledge: 0, expansion: 0, balance: 0 }) as MacroId[];
 
 function load(): GameState | null {
   try {
@@ -63,13 +60,22 @@ function stateSummary(s: GameState) {
 
 export default function App() {
   const narrated = useRef(new Set<number>());
-  const [state, setState] = useState<GameState>(() => load() ?? createGame());
+  const [state, setState] = useState<GameState>(() => {
+    const saved = load();
+    if (saved) {
+      saved.buffs = saved.buffs ?? [];
+      saved.chronicle.forEach((e) => narrated.current.add(e.id));
+    }
+    return saved ?? createGame();
+  });
   const [order, setOrder] = useState("");
   const [sending, setSending] = useState(false);
-  const [showMap, setShowMap] = useState(false);
+  const [showAssets, setShowAssets] = useState(false);
   const [letterOpen, setLetterOpen] = useState<Letter | null>(null);
   const [letterBody, setLetterBody] = useState<{ titre: string; corps: string } | null>(null);
   const [report, setReport] = useState<ImpactReport | null>(null);
+  const [alloc, setAlloc] = useState({ grain: 0, defense: 0, social: 0, prestige: 0, invest: 0 });
+  const [investCat, setInvestCat] = useState("port");
   const chronicleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,14 +90,13 @@ export default function App() {
           assets: prev.assets.map((a) => ({ ...a })),
           pendingLetters: [...prev.pendingLetters],
           chronicle: [...prev.chronicle],
+          buffs: [...prev.buffs],
         };
         for (const e of step(next)) {
           next.chronicle.push(e);
           if (narrated.current.has(e.id)) continue;
           narrated.current.add(e.id);
-          if (e.kind === "info") {
-            // déjà dans la chronique
-          } else {
+          if (e.kind !== "info") {
             void narrate(next, e).then((text) => {
               setState((s) => ({
                 ...s,
@@ -151,6 +156,7 @@ export default function App() {
         assets: s.assets.map((a) => ({ ...a })),
         pendingLetters: [...s.pendingLetters],
         chronicle: [...s.chronicle],
+        buffs: [...s.buffs],
       };
       const su = res.state_updates;
       next.metrics.treasury = Math.max(0, Math.round(next.metrics.treasury + su.treasury_change));
@@ -163,12 +169,13 @@ export default function App() {
         const c = ASSET_CATALOG[cat];
         const t = tiles.length > 0 ? tiles[Math.floor(Math.random() * tiles.length)] : { x: 0, y: 0 };
         const cost = Math.abs(su.treasury_change);
+        const lvl = levelOf(cost || q.level * 50);
         next.assets.push({
           id: q.id || `asset_${next.nextId++}`,
           name: q.name || c.name,
           emoji: q.emoji || c.emoji,
           cat,
-          level: levelOf(cost || q.level * 50),
+          level: lvl,
           status: "building",
           remainingTicks: q.construction_ticks,
           monthlyRevenue: q.monthly_revenue,
@@ -228,15 +235,84 @@ export default function App() {
     }));
   }
 
+  function stepAlloc(key: keyof typeof alloc, d: number) {
+    setAlloc((a) => ({ ...a, [key]: Math.max(0, a[key] + d) }));
+  }
+
+  function validateBudget() {
+    const total = alloc.grain + alloc.defense + alloc.social + alloc.prestige + alloc.invest;
+    if (total <= 0 || total > state.metrics.treasury) return;
+    const a = { ...alloc };
+    const cat = investCat;
+    setAlloc({ grain: 0, defense: 0, social: 0, prestige: 0, invest: 0 });
+    setState((s) => {
+      const next: GameState = {
+        ...s,
+        meta: { ...s.meta },
+        metrics: { ...s.metrics },
+        assets: s.assets.map((x) => ({ ...x })),
+        pendingLetters: [...s.pendingLetters],
+        chronicle: [...s.chronicle],
+        buffs: [...s.buffs],
+      };
+      next.metrics.treasury = Math.max(0, Math.round(next.metrics.treasury - total));
+      next.foodStock += a.grain * 3;
+      next.metrics.unrest = Math.max(0, Math.round(next.metrics.unrest - a.social * 0.4));
+      next.metrics.prestige = Math.min(100, Math.round(next.metrics.prestige + a.prestige * 0.3));
+      if (a.defense > 0) {
+        next.buffs.push({ nom: "Milice levée", moisRestants: 1, defense: Math.max(1, Math.round(a.defense / 10)) });
+      }
+      if (a.invest > 0) {
+        const c = ASSET_CATALOG[cat];
+        const lvl = levelOf(a.invest);
+        const tiles = freeTiles(next);
+        const t = tiles.length > 0 ? tiles[Math.floor(Math.random() * tiles.length)] : { x: 0, y: 0 };
+        next.assets.push({
+          id: `asset_${next.nextId++}`,
+          name: c.name,
+          emoji: c.emoji,
+          cat,
+          level: lvl,
+          status: "building",
+          remainingTicks: c.baseTicks * lvl,
+          monthlyRevenue: c.baseRevenue * lvl,
+          monthlyUpkeep: c.baseUpkeep * lvl,
+          foodYield: c.foodYield,
+          prestigeYield: c.prestigeYield,
+          defense: c.defense,
+          x: t.x,
+          y: t.y,
+        });
+        next.chronicle.push({
+          id: next.nextId++,
+          year: next.meta.year,
+          kind: "joy",
+          text: `🏗️ Budget voté : ${a.invest} 💰 investis dans ${c.emoji} ${c.name} (niveau ${lvl}), chantier de ${c.baseTicks * lvl} mois.`,
+        });
+      }
+      next.chronicle.push({
+        id: next.nextId++,
+        year: next.meta.year,
+        kind: "info",
+        text: `🧾 Budget du mois voté : 🌾${a.grain} 🛡️${a.defense} 😊${a.social} 🏅${a.prestige} 🏗️${a.invest} 💰 — reste ${Math.round(next.metrics.treasury)} 💰 en caisse.`,
+      });
+      return next;
+    });
+    void sendOrderText(
+      `Voici le budget voté pour ce mois : grain ${a.grain} 💰, défense ${a.defense} 💰, social ${a.social} 💰, prestige ${a.prestige} 💰, investissement ${a.invest} 💰 dans ${ASSET_CATALOG[cat].name}. Donne ton avis de Bailli en une phrase et un petit ajustement chiffré si besoin.`
+    );
+  }
+
   function newGame() {
     narrated.current.clear();
     const g = createGame();
     setState(g);
-    pushLogInit(g);
-  }
-
-  function pushLogInit(g: GameState) {
-    void narrate(g, { id: 0, year: g.meta.year, kind: "joy", text: `Le domaine de ${g.meta.rulerTitle} commence son histoire (maison ${g.meta.dynastyName}).` }).then((text) =>
+    void narrate(g, {
+      id: 0,
+      year: g.meta.year,
+      kind: "joy",
+      text: `Le domaine de ${g.meta.rulerTitle} commence son histoire (maison ${g.meta.dynastyName}).`,
+    }).then((text) =>
       setState((s) => ({ ...s, chronicle: [{ id: s.nextId++, year: s.meta.year, kind: "joy", text }] }))
     );
   }
@@ -244,6 +320,8 @@ export default function App() {
   const m = state.metrics;
   const net = m.monthlyIncome - m.monthlyUpkeep;
   const unread = state.pendingLetters.length;
+  const totalAlloc = alloc.grain + alloc.defense + alloc.social + alloc.prestige + alloc.invest;
+  const reste = Math.round(m.treasury) - totalAlloc;
 
   return (
     <div className="app">
@@ -262,18 +340,20 @@ export default function App() {
           <span className="chip">🛡️ {totalDefense(state)}</span>
         </div>
         <div className="controls">
-          <button type="button" onClick={() => setShowMap(true)} title="Carte des actifs, lois">🗺️ Domaine</button>
+          <button type="button" onClick={() => setShowAssets(true)} title="Liste des actifs du domaine">
+            📋 Actifs ({state.assets.length})
+          </button>
         </div>
       </header>
 
       <div className="layout">
         <main className="page">
-          <div className="chronicle" ref={chronicleRef}>
+          <div className="chronique chronicle" ref={chronicleRef}>
             <h2>📜 Chronique du domaine</h2>
             {state.chronicle.length === 0 && (
               <p className="empty">
                 Le domaine de {state.meta.rulerTitle} s'éveille. Le monde avance tout seul ;
-                écrivez vos ordres à droite pour agir.
+                arbitrez le budget et répondez au courrier pour agir.
               </p>
             )}
             {state.chronicle.map((c) => (
@@ -314,32 +394,64 @@ export default function App() {
           </form>
 
           <div className="card budget-card">
-            <h2>💰 Trésorerie</h2>
+            <h2>💰 Budget du mois</h2>
             <div className="budget-or">
-              {Math.round(m.treasury)} <small>💰</small>
+              {Math.round(m.treasury)} <small>💰 en caisse</small>
             </div>
             <div className="budget-income">
-              + {m.monthlyIncome} 💰/mois de revenus · − {m.monthlyUpkeep} d'entretien → net {net >= 0 ? "+" : ""}
-              {net} 💰/mois
+              revenus {m.monthlyIncome} · charges {m.monthlyUpkeep} → net {net >= 0 ? "+" : ""}
+              {net} 💰/mois · réserve 🌾 {m.foodReserve} mois · inquiétude 😠 {Math.round(m.unrest)} %
             </div>
+            {BUDGET_POSTES.map((p) => (
+              <div className="macro-row" key={p.key}>
+                <span title={p.hint}>
+                  {p.emoji} {p.label}
+                </span>
+                <span className="macro-ctrl">
+                  <button type="button" onClick={() => stepAlloc(p.key, -5)} disabled={alloc[p.key] <= 0}>−</button>
+                  <b>{alloc[p.key]} 💰</b>
+                  <button type="button" onClick={() => stepAlloc(p.key, 5)}>+</button>
+                </span>
+              </div>
+            ))}
+            <div className="macro-row">
+              <span>🏗️ Investissement</span>
+              <span className="macro-ctrl">
+                <select value={investCat} onChange={(e) => setInvestCat(e.target.value)}>
+                  {Object.entries(ASSET_CATALOG)
+                    .filter(([k]) => k !== "château")
+                    .map(([k, c]) => (
+                      <option key={k} value={k}>
+                        {c.emoji} {c.name} (~{c.baseCost} 💰)
+                      </option>
+                    ))}
+                </select>
+                <button type="button" onClick={() => stepAlloc("invest", -10)} disabled={alloc.invest <= 0}>−</button>
+                <b>{alloc.invest} 💰</b>
+                <button type="button" onClick={() => stepAlloc("invest", 10)}>+</button>
+              </span>
+            </div>
+            <div className="budget-total">
+              Alloué : {totalAlloc} 💰 · reste : {reste} 💰
+            </div>
+            <button
+              type="button"
+              className="send"
+              onClick={validateBudget}
+              disabled={totalAlloc <= 0 || reste < 0}
+            >
+              ✅ Valider le budget du mois
+            </button>
           </div>
 
           <div className="card strategy-card">
             <h2>🎯 Orientations macro</h2>
-            <p className="strategy-hint">Vous fixez l'orientation (niveaux 0-5) ; la tactique et le micro sont au Bailli, aux hommes et aux villageois.</p>
-            {(Object.keys(MACRO_LABELS) as MacroId[]).map((id) => (
+            {MACRO_IDS.map((id) => (
               <div className="macro-row" key={id}>
-                <span title={MACRO_LABELS[id].desc}>
-                  {MACRO_LABELS[id].emoji} {MACRO_LABELS[id].name}
-                </span>
+                <span>{state.macro[id]}/5</span>
                 <span className="macro-ctrl">
-                  <button type="button" onClick={() => setMacro(id, -1)} disabled={state.macro[id] <= 0}>
-                    −
-                  </button>
-                  <b>{state.macro[id]}</b>
-                  <button type="button" onClick={() => setMacro(id, 1)} disabled={state.macro[id] >= 5}>
-                    +
-                  </button>
+                  <button type="button" onClick={() => setMacro(id, -1)} disabled={state.macro[id] <= 0}>−</button>
+                  <button type="button" onClick={() => setMacro(id, 1)} disabled={state.macro[id] >= 5}>+</button>
                 </span>
               </div>
             ))}
@@ -351,14 +463,12 @@ export default function App() {
               {state.running ? "⏸ Mettre en pause" : "▶ Reprendre"}
             </button>
             <button type="button" onClick={() => setState((s) => ({ ...s, speed: SPEEDS[(SPEEDS.indexOf(s.speed) + 1) % SPEEDS.length] }))}>
-              Vitesse de simulation : ×{state.speed}
+              Vitesse : ×{state.speed}
             </button>
             <button type="button" onClick={() => setState((s) => ({ ...s, autoDev: !s.autoDev }))} aria-pressed={state.autoDev}>
               🏘️ Village autonome : {state.autoDev ? "oui" : "non"}
             </button>
-            <button type="button" onClick={newGame}>
-              ✨ Nouvelle chronique (recommencer)
-            </button>
+            <button type="button" onClick={newGame}>✨ Nouvelle chronique</button>
           </div>
         </aside>
       </div>
@@ -420,41 +530,28 @@ export default function App() {
         </div>
       )}
 
-      {showMap && (
-        <div className="overlay" onClick={() => setShowMap(false)}>
+      {showAssets && (
+        <div className="overlay" onClick={() => setShowAssets(false)}>
           <div className="overlay-panel" onClick={(e) => e.stopPropagation()}>
             <div className="overlay-head">
-              <h2>🗺️ Domaine — {state.assets.length} actif(s)</h2>
-              <button type="button" onClick={() => setShowMap(false)}>✕ Fermer</button>
+              <h2>📋 Actifs du domaine ({state.assets.length})</h2>
+              <button type="button" onClick={() => setShowAssets(false)}>✕ Fermer</button>
             </div>
-            <div className="map">
-              {Array.from({ length: GRID_H }, (_, y) =>
-                Array.from({ length: GRID_W }, (_, x) => {
-                  const a = assetAt(state, x, y);
-                  return (
-                    <div key={`${x}-${y}`} className={`tile${a ? " built" : ""}${a?.status === "damaged" ? " damaged" : ""}`} title={a ? `${a.emoji} ${a.name} N${a.level} — ${a.status === "building" ? `chantier ${a.remainingTicks} mois` : `+${a.monthlyRevenue} 💰/mois, −${a.monthlyUpkeep} entretien`}` : ""}>
-                      {a ? (
-                        <>
-                          <span className="emoji">{a.emoji}</span>
-                          {a.status === "building" && (
-                            <span className="progress"><span style={{ width: `${Math.round(((1 - a.remainingTicks / Math.max(1, a.remainingTicks + 1)) ) * 100)}%` }} /></span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="grass">🌿</span>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <div className="projects">
-              <h3>📊 Actifs en cours</h3>
-              {state.assets.filter((a) => a.cat !== "château").map((a) => (
-                <div className="tech" key={a.id}>
-                  <span>
-                    {a.emoji} {a.name} N{a.level} <small>{a.status === "building" ? `chantier : ${a.remainingTicks} mois` : a.status === "damaged" ? "endommagé — à réparer" : `+${a.monthlyRevenue} 💰/mois, entretien ${a.monthlyUpkeep}`}</small>
+            <div className="asset-list">
+              {state.assets.map((a) => (
+                <div className={`asset-row${a.status === "damaged" ? " damaged" : ""}`} key={a.id}>
+                  <span className="asset-emoji">{a.emoji}</span>
+                  <span className="asset-name">
+                    {a.name} <b>N{a.level}</b>
+                    <small>
+                      {a.status === "building"
+                        ? `chantier : ${a.remainingTicks} mois restants`
+                        : a.status === "damaged"
+                          ? "endommagé — à réparer"
+                          : `+${a.monthlyRevenue} 💰/mois · entretien ${a.monthlyUpkeep} 💰/mois${a.foodYield ? ` · +${a.foodYield * a.level}🌾` : ""}${a.prestigeYield ? ` · +${a.prestigeYield * a.level}🏅` : ""}${a.defense ? ` · +${a.defense}🛡️` : ""}`}
+                    </small>
                   </span>
+                  <span className={`asset-status ${a.status}`}>{a.status === "building" ? "🔨 chantier" : a.status === "damaged" ? "🔥 endommagé" : "✅ actif"}</span>
                 </div>
               ))}
             </div>

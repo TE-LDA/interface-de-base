@@ -69,6 +69,12 @@ export interface LogEntry {
   text: string;
 }
 
+export interface Buff {
+  nom: string;
+  moisRestants: number;
+  defense?: number;
+}
+
 export interface GameState {
   meta: Meta;
   metrics: Metrics;
@@ -76,6 +82,7 @@ export interface GameState {
   assets: Asset[];
   pendingLetters: Letter[];
   chronicle: LogEntry[];
+  buffs: Buff[];
   running: boolean;
   speed: number;
   autoDev: boolean;

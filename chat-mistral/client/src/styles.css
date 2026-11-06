@@ -791,3 +791,62 @@ button:disabled {
   background: radial-gradient(circle at 35% 30%, #b0763f, #7c4a22);
   border-color: #5a2c10;
 }
+
+/* --- v3 : budget à arbitrer, liste d'actifs (sans carte) --- */
+
+.budget-card select {
+  font-family: inherit;
+  font-size: 0.8rem;
+  max-width: 150px;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--bordure);
+  border-radius: 6px;
+  background: #fff8e6;
+  color: var(--encre);
+}
+
+.budget-card .send {
+  margin-top: 0.55rem;
+}
+
+.asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.asset-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--bordure);
+  border-radius: 8px;
+  background: rgba(255, 248, 230, 0.7);
+}
+
+.asset-row.damaged {
+  background: #f6dcc8;
+  border-color: #8a3a2a;
+}
+
+.asset-emoji {
+  font-size: 1.4rem;
+}
+
+.asset-name {
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+.asset-name small {
+  display: block;
+  color: #7a5a2e;
+  font-size: 0.78rem;
+}
+
+.asset-status {
+  font-size: 0.8rem;
+  font-variant: small-caps;
+  white-space: nowrap;
+}
